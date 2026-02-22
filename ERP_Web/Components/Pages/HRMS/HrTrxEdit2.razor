@@ -1,0 +1,177 @@
+﻿@page "/HR/HrTrxEdit/{Code?}"
+@rendermode InteractiveServer
+@inject MessageService MessageService
+@using ERP_Web.Repository
+@using ERP_Web.Models
+@using ERP_Web.Models.HRMS
+@inject HrRepository HrRepo
+@inject NavigationManager NavigationManager
+
+<PageTitle>人事异动单编辑</PageTitle>
+
+<Row Gutter="16" Align="RowAlign.Middle" Style="margin-bottom:16px">
+    <Col>
+        <Title Level="3">人事异动单编辑</Title>
+        <Text Type="TextElementType.Secondary">单据号：@Data.Code</Text>
+    </Col>
+    <Col>
+        <Button Type="ButtonType.Primary" OnClick="Submit" Disabled="@(Data.ApprovalStatus >=2)">提交审批</Button>
+        <Button Type="ButtonType.Default" OnClick="Save" Style="margin-left:8px">保存</Button>
+        <Button Type="ButtonType.Default" Style="margin-left:8px">返回</Button>
+    </Col>
+</Row>
+
+<Form Model="@Data" OnFinish="Save">
+    <Alert Type="AlertType.Warning" Message="异动单审批通过后将自动更新员工档案，不可修改，请确认信息准确" Style="margin-bottom:16px" />
+    
+    <GridRow>
+        <GridCol Span="6">
+            <FormItem Label="异动类型" Required>
+                <Select @bind-Value="@Data.TrxType" TItem="int" TItemValue="int" Disabled="@(Data.ApprovalStatus >=2)">
+                    @foreach (var type in Enum.GetValues<HrTrxTypeEnum>())
+                    {
+                        <SelectOption Value="(int)type">@type.ToString()</SelectOption>
+                    }
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="员工" Required>
+                <Select @bind-Value="@Data.EmployeeCode" DataSource="@_employeeList" LabelName="Name" ValueName="Code" Disabled="@(Data.ApprovalStatus >=2)" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="生效日期" Required>
+                <DatePicker @bind-Value="@Data.EffectiveDate" Disabled="@(Data.ApprovalStatus >=2)" />
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <!-- 调岗/部门调动字段 -->
+    @if (Data.TrxType is (int)HrTrxTypeEnum.调岗 or (int)HrTrxTypeEnum.部门调动 or (int)HrTrxTypeEnum.入职)
+    {
+        <GridRow>
+            @if (Data.TrxType is not (int)HrTrxTypeEnum.入职)
+            {
+                <GridCol Span="6">
+                    <FormItem Label="原部门">
+                        <Select @bind-Value="@Data.OldDepartmentCode" DataSource="@_departmentList" LabelName="Name" ValueName="Code" Disabled />
+                    </FormItem>
+                </GridCol>
+            }
+            <GridCol Span="6">
+                <FormItem Label="新部门" Required>
+                    <Select @bind-Value="@Data.NewDepartmentCode" DataSource="@_departmentList" LabelName="Name" ValueName="Code" Disabled="@(Data.ApprovalStatus >=2)" />
+                </FormItem>
+            </GridCol>
+            <GridCol Span="6">
+                <FormItem Label="新岗位" Required>
+                    <Select @bind-Value="@Data.NewPositionCode" DataSource="@_positionList" LabelName="Name" ValueName="Code" Disabled="@(Data.ApprovalStatus >=2)" />
+                </FormItem>
+            </GridCol>
+        </GridRow>
+    }
+
+    <!-- 调薪字段 -->
+    @if (Data.TrxType is (int)HrTrxTypeEnum.调薪 or (int)HrTrxTypeEnum.入职)
+    {
+        <GridRow>
+            @if (Data.TrxType == (int)HrTrxTypeEnum.调薪)
+            {
+                <GridCol Span="6">
+                    <FormItem Label="原薪资">
+                    </FormItem>
+                </GridCol>
+            }
+            <GridCol Span="6">
+                <FormItem Label="新薪资" Required>
+                </FormItem>
+            </GridCol>
+        </GridRow>
+    }
+
+    <!-- 离职字段 -->
+    @if (Data.TrxType == (int)HrTrxTypeEnum.离职)
+    {
+        <GridRow>
+            <GridCol Span="6">
+                <FormItem Label="离职日期">
+                    <DatePicker @bind-Value="@Data.EffectiveDate" Disabled="@(Data.ApprovalStatus >=2)" />
+                </FormItem>
+            </GridCol>
+            <GridCol Span="6">
+                <FormItem Label="离职类型">
+
+                </FormItem>
+            </GridCol>
+        </GridRow>
+    }
+
+    <GridRow>
+        <GridCol Span="18">
+            <FormItem Label="异动原因" Required>
+                <Input @bind-Value="@Data.Reason" Disabled="@(Data.ApprovalStatus >=2)" />
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    @if (Data.ApprovalStatus >= 2)
+    {
+        <Alert Type="AlertType.Success" Message="该异动单已审批生效，已自动更新员工档案" />
+    }
+</Form>
+
+@code {
+    [Parameter]
+    public string? Code { get; set; }
+    public HrTransaction Data = new();
+    private List<Employee> _employeeList = [];
+    private List<Department> _departmentList = [];
+    private List<Position> _positionList = [];
+    private int _leaveType = 1;
+    private readonly HrRepository _hrRepo = new();
+
+    protected override void OnInitialized()
+    {
+        _employeeList = _hrRepo.GetEmployeeList().Where(e => e.Status is 1 or 2).ToList();
+        _departmentList = new SqlClient().Db.Queryable<Department>().ToList();
+        _positionList = _hrRepo.GetPositionList();
+
+        if (!string.IsNullOrEmpty(Code))
+        {
+            Data = _hrRepo.GetHrTrxByCode(Code);
+            // 自动填充原部门/原薪资
+            if (Data.TrxType is (int)HrTrxTypeEnum.调岗 or (int)HrTrxTypeEnum.部门调动)
+            {
+                var emp = _hrRepo.GetEmployeeByCode(Data.EmployeeCode);
+                Data.OldDepartmentCode = emp.DepartmentCode;
+                Data.OldPositionCode = emp.PositionCode;
+            }
+            if (Data.TrxType == (int)HrTrxTypeEnum.调薪)
+            {
+                var emp = _hrRepo.GetEmployeeByCode(Data.EmployeeCode);
+                Data.OldTotalSalary = emp.BaseSalary + emp.PostSalary;
+            }
+        }
+        else
+        {
+            Data.Code = "HR_TRX_" + DateTime.Now.ToString("yyyyMMddHHmmss");
+            Data.Operator = "当前登录用户"; // 替换为你系统的当前登录用户名
+            Data.ApprovalStatus = 0;
+        }
+    }
+
+    private void Save()
+    {
+        _hrRepo.SaveHrTrx(Data);
+        MessageService.Success("保存成功");
+    }
+
+    private void Submit()
+    {
+        Data.ApprovalStatus = 1; // 审批中
+        _hrRepo.SaveHrTrx(Data);
+        MessageService.Success("已提交审批");
+        NavigationManager.NavigateTo("/HR/HrTrxList");
+    }
+}

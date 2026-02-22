@@ -1,0 +1,180 @@
+﻿@page "/product-detail/{ProductId}"
+@using ERP_Web.Models
+@using ERP_Web.Models.PrivilegeHub
+@inject NavigationManager NavigationManager
+@inject MessageService MessageService
+@inject AuthenticationStateProvider AuthProvider
+
+
+<PageHeader Title="@product.Name" SubTitle="商品详细信息"></PageHeader>
+<Button Type="ButtonType.Link" Icon="arrow-left" OnClick="GoBack">返回商品列表</Button>
+
+<Row Gutter="16">
+    <Col Span="12">
+        <Card Hoverable>
+            <Cover>
+                <img src="@(product.Image ?? "images/default-product.png")" alt="@product.Name" style="width: 100%; height: 400px; object-fit: contain;" />
+            </Cover>
+            <Body>
+                <Divider />
+                <Descriptions Title="属性" Column="1">
+                    @foreach (var item in product.Attributes)
+                    {
+                        <DescriptionsItem Title="@item.Attribute">
+                            <RadioGroup @bind-Value="@item.SelectedOptionId" Name="@item.Attribute">
+                                @foreach (var o in item.Options)
+                                {
+                                    <Radio Value="@o.Id"> @o.Value</Radio>
+                                }
+                            </RadioGroup>
+                        </DescriptionsItem>
+                    }
+                </Descriptions>
+                <Button Type="ButtonType.Primary" Icon="shopping-cart" OnClick="@(e => ShowSpecSelector(product, e))">选择规格并加入购物车</Button>
+            </Body>
+        </Card>
+    </Col>
+    <Col Span="12">
+        <Card Title="商品信息">
+            <Body>
+                <Descriptions Title="基本信息" Column="1">
+                    <DescriptionsItem Title="商品名称">@product.Name</DescriptionsItem>
+                    <DescriptionsItem Title="分类">@(product.Category?.Name ?? "未分类")</DescriptionsItem>
+                    <DescriptionsItem Title="商品编码">@product.Code</DescriptionsItem>
+                    <DescriptionsItem Title="基础价格">
+                        ¥ @product.Specifications.FirstOrDefault()?.Options.FirstOrDefault()?.Price
+                    </DescriptionsItem>
+                </Descriptions>
+
+@*<Divider />
+    <Descriptions Title="属性" Column="1"> 
+    @foreach (var item in product.Attributes)
+    {
+        <DescriptionsItem Title="@item.Attribute">
+            <Space>
+                @foreach (var itemd in item.Options)
+                {
+                    <text>@itemd.Value ; </text>
+                }
+            </Space>
+        </DescriptionsItem>
+    }
+</Descriptions> *@
+                <Divider />
+                <Descriptions Title="规格" Column="1">                 
+                    @foreach (var spec in product.Specifications)
+                    {
+                        <DescriptionsItem Title="规格">@spec.Description</DescriptionsItem>
+                    }
+                </Descriptions>
+
+                <Divider />
+
+                <Button Type="ButtonType.Primary" Icon="shopping-cart" OnClick="@(e => ShowSpecSelector(product, e))">选择规格并加入购物车</Button>
+            </Body>
+        </Card>
+    </Col>
+</Row>
+
+@code{
+    string radioValue1 = "A";
+
+    string radioValue2 = "A";
+
+}
+@code {
+    [Parameter]
+    public string ProductId { get; set; } // 从路由获取
+
+    private InventoryItem? product;
+    private User user;
+
+    protected override void OnInitialized()
+    {
+        // 根据 ProductId 加载商品数据
+        // 示例：product = InventoryItem.GetById(int.Parse(ProductId));
+        // 实际需要调用服务层或数据库
+        LoadProductData();
+        GetUser();
+    }
+    public async Task GetUser()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userCode = authState.User.FindFirst("Account")?.Value;
+
+        user = User.SelectByAccount(userCode);
+    }
+
+    private void LoadProductData()
+    {
+        // TODO: 实现根据 ProductId 加载商品的逻辑
+        // 这里用假数据模拟
+        product = InventoryItem.Select(ProductId);
+        foreach (var item in product.Attributes)
+        {
+            item.SelectedOptionId = item.Options[0].Id;
+        }
+
+        MessageService.Info("测试");
+
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/sales/products"); // 或你的商品列表页路由
+    }
+
+    private async Task ShowSpecSelector(InventoryItem product, MouseEventArgs e)
+    {
+        // 这里需要将控制权传回给 ProductSelection 页面来打开模态框
+        // 由于跨组件通信较复杂，一个简单方法是提示用户返回列表页操作
+        // 更好的方式是利用状态管理或事件总线，这里简化处理
+
+        ShoppingCart shoppingCart = ShoppingCart.GetUserCart(user.Code) ?? new ShoppingCart(user);
+        Specification specification = new Specification(product.Code);
+        List<InvAttribute> missingAttributes = product.Attributes.Where(x => x.SelectedOptionId != 0).ToList();
+        // if (missingAttributes.Count != product.Attributes.Count)
+        // {
+        //     MessageService.Warning("请选择所有属性的选项");
+        //     return;
+        // }
+        if (missingAttributes.Count == 0) // 没有选择任何属性选项，使用默认规格
+        {
+            specification = product.Specifications.Where(xx => xx.IsDefault == true).FirstOrDefault() ?? product.Specifications.FirstOrDefault();
+            //MessageService.Warning("请选择至少一个属性的选项");
+            //return;
+        }
+        else
+        {
+            foreach (var item in missingAttributes)
+            {
+                if (item.SelectedOptionId != 0)
+                {
+                    specification.Options.Add(item.Options.First(o => o.Id == item.SelectedOptionId));
+                }
+                // else
+                // {
+                //     MessageService.Warning($"请选择 {item.Attribute} 的选项");
+                //     return;
+                // }
+            }
+            specification.GetDesc();
+            specification.Insert();
+        }
+        //specification = Specification.SelectBySKU(specification.SKU);
+        //specification = product.Specifications.Where(xx => xx.IsDefault == true).FirstOrDefault() ?? product.Specifications.FirstOrDefault();
+
+        shoppingCart.Items.Add(new CartItem
+        {
+            InventoryItem = product,
+            InvCode = product.Code,
+            Quantity = 1,
+            SKU = specification.SKU,
+            Price = specification.Options.FirstOrDefault()?.Price ?? 0
+        });
+
+        shoppingCart.InsertOrUpdate();
+
+        MessageService.Info("添加购物车成功");
+    }
+}

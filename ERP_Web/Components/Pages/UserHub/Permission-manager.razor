@@ -1,0 +1,349 @@
+﻿@page "/permission-management"
+@using ERP_Web.Models
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@using AntDesign
+@inject MessageService MessageService
+@inject ModalService ModalService
+
+<PageHeader Title="权限管理" SubTitle="管理系统中所有权限标识"></PageHeader>
+<ButtonGroup>
+    <Button Type="ButtonType.Primary" Icon="plus" OnClick="ShowAddModal">添加权限</Button>
+    <Button Type="ButtonType.Primary" Icon="sync" OnClick="SyncFromMenus">从菜单更新</Button>
+    <Button Type="ButtonType.Primary" Icon="sync" OnClick="SyncFromButtons">从按钮更新</Button>
+</ButtonGroup>
+
+<Card>
+    <Table @ref="tableRef" DataSource="@permissions" TItem="Permission" Bordered="true" Size="TableSize.Small">
+        <PropertyColumn Property="c=>c.Id" Width="80px" />
+        <PropertyColumn Property="c=>c.PermissionKey">
+        </PropertyColumn>
+        <PropertyColumn Property="c=>c.Description" />
+        <ActionColumn Title="操作" Width="200px">
+            <Template>
+                    <Space>
+                        <Button Type="ButtonType.Link" Size="ButtonSize.Small" Icon="edit" OnClick="@(e => ShowEditModal(context))">编辑</Button>
+                        <Button Type="ButtonType.Link" Size="ButtonSize.Small" Danger Icon="delete" 
+                                OnClick="@(async e => await DeletePermission(context))">
+                            删除
+                        </Button>
+                    </Space>
+            </Template>
+        </ActionColumn>
+    </Table>
+</Card>
+
+<!-- 添加/编辑权限的模态框 -->
+<Modal Title="@(isEditing ? "编辑权限" : "添加权限")" 
+        @ref="editModal"
+        OnOk="SavePermission" 
+        OnCancel="CloseModal"
+        Width="600"
+        DestroyOnClose="true">
+    <Form Model="@currentPermission" Layout="FormLayout.Vertical">
+        <FormItem Label="权限标识" Required>
+            <Input @bind-Value="@currentPermission.PermissionKey" 
+                    Placeholder="例如：user.add" 
+                    AllowClear />
+            <div style="font-size: 12px; color: #8c8c8c; margin-top: 4px;">
+                格式建议：模块名.操作名，如：user.add, role.delete
+            </div>
+        </FormItem>
+            
+        <FormItem Label="描述信息" Required>
+            <TextArea @bind-Value="@currentPermission.Description" 
+                        Rows="3"
+                        Placeholder="权限描述" 
+                        MaxLength="200"
+                        ShowCount />
+        </FormItem>
+            
+        <FormItem Label="关联菜单" >
+            <Select TItem="AppMenu"
+                    TItemValue="int?"
+                    Placeholder="搜索菜单以关联权限"
+                    DataSource="@filteredMenus"
+                    @bind-Value="@relatedMenuId"
+                    ValueName="@nameof(AppMenu.Id)"
+                    LabelName="@nameof(AppMenu.Name)"
+                    OnSearch="OnMenuSearch">
+            </Select>
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    private List<Permission> permissions = new();
+    private List<AppMenu> allMenus = new();
+    private List<AppMenu> filteredMenus = new();
+    private Permission currentPermission = new();
+    private Modal? editModal = new();
+    private bool showModal = false;
+    private bool isEditing = false;
+    private int? relatedMenuId = null;
+    private Table<Permission>? tableRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }                                                                                                                      
+
+    private async Task LoadData()
+    {
+        var SSC = new SqlClient();
+        // 加载权限数据
+        permissions = await SSC.Db.Queryable<Permission>().ToListAsync();
+
+        // 加载菜单数据
+        allMenus = await SSC.Db.Queryable<AppMenu>()
+            .Where(m => m.Active)
+            .ToListAsync();
+       filteredMenus = allMenus; // 初始时显示全部菜单
+    }
+
+    // 显示添加模态框
+    private void ShowAddModal()
+    {
+        isEditing = false;
+        currentPermission = new Permission();
+        relatedMenuId = null;
+        showModal = true;
+        editModal.Visible = true;
+    }
+    // 菜单搜索处理
+    private void OnMenuSearch(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            filteredMenus = allMenus;
+        }
+        else
+        {
+            filteredMenus = allMenus
+                .Where(m =>
+                    m.Name.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                    m.Key.Contains(value, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    // 显示编辑模态框
+    private void ShowEditModal(Permission perm)
+    {
+        isEditing = true;
+        //currentPermission = perm.Clone(); // 假设有Clone方法
+        relatedMenuId = null;
+        
+        // 查找关联菜单
+        var relatedMenu = allMenus.FirstOrDefault(m => 
+            m.PermissionKey == perm.PermissionKey);
+        if (relatedMenu != null) relatedMenuId = relatedMenu.Id;
+        //showModal = true;
+        editModal.Visible = true;
+    }
+
+    // 关闭模态框
+    private void CloseModal()
+    {
+       editModal.Visible = false;
+    }
+
+    // 保存权限
+    private async Task SavePermission()
+    {
+        var SSC = new SqlClient();
+
+        // 验证输入
+        if (string.IsNullOrWhiteSpace(currentPermission.PermissionKey))
+        {
+            MessageService.Error("权限标识不能为空");
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(currentPermission.Description))
+        {
+            MessageService.Error("描述信息不能为空");
+            return;
+        }
+        
+        try
+        {
+            if (isEditing)
+            {
+                // 更新现有权限
+                await SSC.Db.Updateable(currentPermission).ExecuteCommandAsync();
+                
+                // 更新关联菜单
+                if (relatedMenuId.HasValue)
+                {
+                    var menu = allMenus.First(m => m.Id == relatedMenuId.Value);
+                    menu.PermissionKey = currentPermission.PermissionKey;
+                    await SSC.Db.Updateable(menu).ExecuteCommandAsync();
+                }
+                
+                MessageService.Success("权限更新成功");
+            }
+            else
+            {
+                // 添加新权限
+                currentPermission.Id = await SSC.Db.Insertable(currentPermission)
+                    .ExecuteReturnIdentityAsync();
+                
+                // 关联到菜单
+                if (relatedMenuId.HasValue)
+                {
+                    var menu = allMenus.First(m => m.Id == relatedMenuId.Value);
+                    menu.PermissionKey = currentPermission.PermissionKey;
+                    await SSC.Db.Updateable(menu).ExecuteCommandAsync();
+                }
+                MessageService.Success("权限添加成功");
+            }
+            await LoadData();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"操作失败: {ex.Message}");
+        }
+    }
+
+    // 删除权限
+    private async Task DeletePermission(Permission perm)
+    {
+        var confirm = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "确认删除权限",
+            Content = $"确定要删除权限 '{perm.PermissionKey}' 吗？",
+            OkText = "删除",
+            OkType = ButtonType.Primary
+        });
+        
+        if (confirm)
+        {
+            try
+            {
+                var SSC = new SqlClient();
+                // 删除权限
+                await SSC.Db.Deleteable<Permission>(perm.Id).ExecuteCommandAsync();
+                // 清除关联菜单的权限标识
+                var relatedMenus = allMenus.Where(m => m.PermissionKey == perm.PermissionKey).ToList();
+                foreach (var menu in relatedMenus)
+                {
+                    menu.PermissionKey = "";
+                    await SSC.Db.Updateable(menu).ExecuteCommandAsync();
+                }
+                MessageService.Success("权限删除成功");
+                await LoadData();
+            }
+            catch (Exception ex)
+            {
+                MessageService.Error($"删除失败: {ex.Message}");
+            }
+        }
+    }
+
+    // 从菜单同步权限
+    private async Task SyncFromMenus()
+    {
+        try
+        {
+            // 获取所有菜单的权限标识
+            var menuPermissions = allMenus
+                .Where(m => !string.IsNullOrWhiteSpace(m.PermissionKey))
+                .Select(m => m)
+                .Distinct()
+                .ToList();
+            
+            // 获取现有权限
+            var existingPermissions = permissions.Select(p => p.PermissionKey).ToList();
+            
+            // 找出需要添加的权限
+            var newPermissions = menuPermissions
+                .Where(p => !existingPermissions.Contains(p.PermissionKey))
+                .Select(p => new Permission
+                {
+                    PermissionKey = p.PermissionKey,
+                    Description = $"从菜单自动同步: {p.Name+p.Path}"
+                })
+                .ToList();
+            
+            if (!newPermissions.Any())
+            {
+                MessageService.Info("没有需要添加的新权限");
+                return;
+            }
+            var SSC = new SqlClient();
+
+            // 添加新权限
+            await SSC.Db.Insertable(newPermissions).ExecuteCommandAsync();
+            
+            MessageService.Success($"成功添加 {newPermissions.Count} 个新权限");
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"同步失败: {ex.Message}");
+        }
+    }
+    // 新增方法：从按钮同步权限
+    private async Task SyncFromButtons()
+    {
+        try
+        {
+            var SSC = new SqlClient();
+
+            // 获取所有按钮的权限标识
+            var buttonPermissions = await SSC.Db.Queryable<SysButton>()
+                .Where(b => !string.IsNullOrWhiteSpace(b.PermissionKey))
+                .Select(b => new
+                {
+                    b.PermissionKey,
+                    b.DisplayText
+                })
+                .ToListAsync();
+
+            // 去重处理
+            var uniqueButtons = buttonPermissions
+                .GroupBy(b => b.PermissionKey)
+                .Select(g => g.First())
+                .ToList();
+
+            // 获取现有权限标识
+            var existingKeys = permissions.Select(p => p.PermissionKey).ToList();
+
+            // 筛选新权限
+            var newPermissions = uniqueButtons
+                .Where(b => !existingKeys.Contains(b.PermissionKey))
+                .Select(b => new Permission
+                {
+                    PermissionKey = b.PermissionKey,
+                    Description = $"从按钮自动同步: {b.DisplayText}"
+                })
+                .ToList();
+
+            if (!newPermissions.Any())
+            {
+                MessageService.Info("没有需要添加的新按钮权限");
+                return;
+            }
+
+            // 批量插入新权限
+            await SSC.Db.Insertable(newPermissions).ExecuteCommandAsync();
+
+            MessageService.Success($"成功添加 {newPermissions.Count} 个按钮权限");
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"同步失败: {ex.Message}");
+        }
+    }
+
+    // 菜单搜索过滤
+    private bool FilterMenuOption(string input, SelectOption<Menu, int> option)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return true;
+        return option.Label.Contains(input, StringComparison.OrdinalIgnoreCase);
+    }
+}

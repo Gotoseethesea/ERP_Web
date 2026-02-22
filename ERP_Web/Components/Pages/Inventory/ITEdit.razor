@@ -1,0 +1,902 @@
+﻿@page "/ITEdit/{Code?}"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ConfirmService;
+@inject MessageService MessageService;
+@inject NavigationManager NavManager;
+@using AntDesign
+@using AntDesign.TableModels
+@using ERP_Web.Components.Custom
+@using ERP_Web.Models
+@using ERP_Web.Core.Extensions
+@using ERP_Web.Repository
+@using SqlSugar
+@using System.Text.Json;
+@inject IJSRuntime JS
+
+<Row Gutter="16" Align="RowAlign.Middle" Style="margin-bottom: 16px">
+    <Col >
+        <Title Level="3">库存单据编辑</Title>
+        <Space>
+            <Text Type="@TextElementType.Secondary">单据号：@Data.Code</Text>
+            <Tag Color="@(string.IsNullOrEmpty(Data.Approver) ? TagColor.Gold : TagColor.Green)">
+                @(string.IsNullOrEmpty(Data.Approver) ? "未审核" : "已审核")
+            </Tag>
+        </Space>
+    </Col>
+    <Col>
+        <Button Type="@ButtonType.Default" OnClick="GoBack">返回列表</Button>
+    </Col>
+</Row>
+
+
+<Card>
+    <Form Model="@Data"
+          OnFinish="OnFinish"
+          OnFinishFailed="OnFinishFailed"
+          WrapperColSpan="24">
+        <Row Gutter=@gutter>
+            <Col Class="gutter-row" Span="4">
+                <FormItem Label="代码">
+                    <Input Disabled @bind-Value="@Data.Code" />
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="分类">
+                    <Select TItem="TrxGroup"
+                            TItemValue="string"
+                            DataSource="@TrxGroups"
+                            @bind-Value="@TrxGrouptemp"
+                            ValueName="@nameof(TrxGroup.Name)"
+                            LabelName="@nameof(TrxGroup.Name)"
+                            GroupName="@nameof(TrxGroup.Note)"
+                            SortByLabel="@SortDirection.Ascending"
+                            SortByGroup="@SortDirection.Descending"
+                            OnSelectedItemChanged="IcTrxGroupChange"
+                            Disabled="@(!string.IsNullOrEmpty(Data.Approver))"
+                            Style="width: 100%;">
+                    </Select>
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="日期">
+                    <DatePicker @bind-Value="@Data.Date" 
+                                Picker="@DatePickerType.Date" 
+                                Disabled="@(!string.IsNullOrEmpty(Data.Approver))"
+                                style="width: 180px" />
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="仓库">
+                    <Select TItem="Warehouse"
+                            TItemValue="string"
+                            DataSource="@Warehouses"
+                            @bind-Value="@WareH"
+                            ValueName="@nameof(Warehouse.Name)"
+                            LabelName="@nameof(Warehouse.Name)"
+                            SortByLabel="@SortDirection.Ascending"
+                            SortByGroup="@SortDirection.Ascending"
+                            OnSelectedItemChanged="WarehouseChange"
+                            Disabled="@(!string.IsNullOrEmpty(Data.Approver))"
+                            style="width: 180px">
+                    </Select>
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="4" >
+                <FormItem Label="公司">
+                    <Select TItem="Company"
+                            TItemValue="string"
+                            DataSource="@Coms"
+                            DefaultValue="@Data.CompanyName"
+                            @bind-SelectedItem="@Data.Company"
+                            OnSelectedItemChanged="(value)=>{Data.CompanyCode = value?.Code;}"
+                            ValueName="@nameof(Company.Name)"
+                            LabelName="@nameof(Company.Name)"
+                            Disabled="@(!string.IsNullOrEmpty(Data.Approver))">
+                    </Select>
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="6" >
+                <FormItem Label="部门">
+                    <Select TItem="Department"
+                            TItemValue="string"
+                            DataSource="@Departments"
+                            @bind-Value="@Dept"
+                            ValueName="@nameof(Department.Name)"
+                            LabelName="@nameof(Department.Name)"
+                            SortByLabel="@SortDirection.Ascending"
+                            SortByGroup="@SortDirection.Ascending"
+                            OnSelectedItemChanged="DeptChange"
+                            Disabled="@(!string.IsNullOrEmpty(Data.Approver))"
+                            style="width: 180px">
+                    </Select>
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="职员">
+                    <Select TItem="Employee"
+                            TItemValue="string"
+                            DataSource="@Emps"
+                            DefaultValue="@Data.EmployeeName"
+                            @bind-SelectedItem="@Data.Employee"
+                            LabelName="@nameof(Employee.Name)"
+                            ValueName="@nameof(Employee.Name)"
+                            OnSelectedItemChanged="(value)=>{Data.EmployeeCode = value?.Code;}"
+                            Disabled="@(!string.IsNullOrEmpty(Data.Approver))"
+                            style="width: 180px">
+                    </Select>
+                </FormItem>
+            </Col>
+
+            <Col Class="gutter-row" Span="12">
+                <FormItem Label="摘要">
+                    <Input @bind-Value="@Data.Explanation" Disabled="@(!string.IsNullOrEmpty(Data.Approver))" />
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="4">
+                @if (string.IsNullOrEmpty(Data.Approver))
+                {
+                    <VoiceRecognition @ref="voiceRecognition"
+                        Id="Explanation"
+                        OnResultReceived="HandleRecognitionResultForExp"
+                        OnError="HandleRecognitionError"
+                        OnEnd="HandleRecognitionEnd"
+                        ShowDebugInfo="false" />
+                }
+            </Col>
+        </Row>
+
+        <Row Gutter=@gutter>
+            <Col Class="gutter-row" Span="6">
+                <FormItem Label="总数量">
+                    <Statistic Value="@Data.Quantity" Precision="2" Style="margin: 0" />
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="6">
+                <FormItem Label="总金额">
+                    <Statistic Value="@Data.Amount" Precision="2" Style="margin: 0" />
+                </FormItem>
+            </Col>
+            <Col Class="gutter-row" Span="6">
+                <FormItem Label="总含税金额">
+                    <Statistic Value="@Data.AmountIncTax" Precision="2" Style="margin: 0" />
+                </FormItem>
+            </Col>
+        </Row>
+    </Form>
+</Card>
+
+
+<Row Align="RowAlign.Middle" Style="margin-top: 16px">
+    <Col Span="4">
+        <Select DataSource="@IcInvlist2"
+                @bind-Value="@InvName"
+                EnableSearch
+                EnableVirtualization=true
+                ValueName="@nameof(InventoryItem.Name)"
+                LabelName="@nameof(InventoryItem.Name)"
+                TItemValue="string"
+                TItem="InventoryItem"
+                Placeholder="@FinalRes"
+                ShowArrowIcon="true"
+                SearchDebounceMilliseconds="350"
+                Loading="_loading"
+                OnSearch="@(async (value) => await InvOnSearch(value))"
+                OnSelectedItemChanged="OnSelectedItem">
+        </Select>
+    </Col>
+
+    <Col Span="2">
+        <VoiceRecognition @ref="voiceRecognition"
+            Id="uniqueId"
+            OnResultReceived="HandleRecognitionResult"
+            OnError="HandleRecognitionError"
+            OnEnd="HandleRecognitionEnd"
+            ShowDebugInfo="false" />
+    </Col>
+
+    <Col Span="4">
+        <ButtonGroup>
+            <Tag Color="TagColor.Magenta">@FinalRes</Tag>
+
+            <Button OnClick="check" Type="ButtonType.Primary" Size="ButtonSize.Default" Style="margin-left: 8px"> 语音识别 </Button>
+            <Button OnClick="addRow" Type="ButtonType.Primary" Size="ButtonSize.Default" Style="margin-left: 8px">
+                插入行
+            </Button>    
+            <Button OnClick="Submit" Type="@ButtonType.Primary" Size="ButtonSize.Default" HtmlType="submit" Style="margin-left: 8px">
+                保存修改
+            </Button>
+            <Button OnClick="CancelEdit" Type="@ButtonType.Default" Size="ButtonSize.Default" Style="margin-left: 8px">
+                取消
+            </Button>
+        </ButtonGroup>
+
+    </Col>
+</Row>
+
+
+<p></p>
+<Modal Title="保存成功" 
+    OnOk="@HandleOk"
+    OnCancel="@HandleCancel" 
+    @bind-Visible="@Modal_visible">
+    <p>单据修改成功，已自动更新库存数据</p>
+</Modal>
+
+<Form Model="@Data"
+        LabelColSpan="0"
+        WrapperColSpan="24">
+    <FormItem>
+        <Table DataSource="@Data.ITInvInOuts" 
+                TItem="ITInvInOut" 
+                Size="TableSize.Small"
+                ScrollX="1500"
+                StickyOffsetHeader="64"
+                OnRowClick="@OnRowClick"
+                Context="row"
+                Resizable
+                HidePagination 
+                Bordered>
+            <PropertyColumn Property="c => Data.ITInvInOuts.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35"> </PropertyColumn>
+            <PropertyColumn Property="c => c.InvCode" Title="存货" Width="120" Fixed="ColumnFixPlacement.Left">
+                <CellRender Context="cell">
+                    @{
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <Input @bind-Value="@row.InvCode" />
+                        }
+                        else
+                        {
+                            @row.InvCode
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.InventoryItem.Name" Title="存货名称" Width="200" Fixed="ColumnFixPlacement.Left">
+                <CellRender Context="cell">
+                    @{
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <InputGroup Compact Style="display: flex; 
+                                align-items: center; 
+                                justify-content: center; 
+                                height: 100%; 
+                                padding: 0 10px;
+                                cursor: pointer;">
+                                <Select DataSource="@Invs"
+                                        @bind-SelectedItem="row.InventoryItem"
+                                        @bind-Value="row.InventoryItem"
+                                        EnableSearch
+                                        EnableVirtualization=true
+                                        LabelName="@nameof(InventoryItem.Name)"
+                                        TItemValue="InventoryItem"
+                                        TItem="InventoryItem"
+                                        Placeholder="@row.InventoryItem.Name"
+                                        ShowArrowIcon="true"
+                                        HideSelected
+                                        SearchDebounceMilliseconds="350"
+                                        Key="@(row.InventoryItem?.Code ?? Guid.NewGuid().ToString())"
+                                        Loading="_loading"
+                                        OnSearch="@(async (value) => await InvOnSearch(value))"
+                                        OnSelectedItemChanged="(val) => OnSelectedItemChangedHandler(val, row)">
+                                </Select>
+                                <Icon Type="file-image" Theme="IconThemeType.Outline"
+                                        OnClick="() =>
+                                        {
+                                            if (!string.IsNullOrEmpty(row.InventoryItem?.Image))
+                                            {
+                                                ImageVisible = true;
+                                                ImageUrl = row.InventoryItem.Image;
+                                            }
+                                        }"
+                                        Style="font-size: 20px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                height: 100%;
+                                padding: 0 10px;
+                                cursor: pointer;" />
+                            </InputGroup>
+                        }
+                        else
+                        {
+                            @(row.InventoryItem?.Name ?? "无")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Specification.Description" Title="规格" Width="200" Ellipsis>
+                <CellRender Context="cell">
+                    @{
+
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <Select DataSource="row.InventoryItem.Specifications"
+                                    @bind-SelectedItem="row.Specification"
+                                    @bind-Value="row.Specification"
+                                    LabelName="@nameof(Specification.Description)"
+                                    TItemValue="Specification"
+                                    TItem="Specification"
+                                    Placeholder="@row.Specification.Description"
+                                    ShowArrowIcon="true"
+                                    SearchDebounceMilliseconds="350"
+                                    Loading="_loading"
+                                    OnSelectedItemChanged="@(value => SpeChanged(row,value))">
+                                <DropdownRender Context="originNode">
+                                    <div>
+                                        @originNode
+                                        <Divider Style="margin: 4px 0"></Divider>
+                                        <div style="display: flex; flex-wrap: nowrap; padding: 8px">
+                                            <Input Style="flex: auto" @bind-Value="@SpeDesc" />
+                                            <a style="flex: none; padding: 8px; display: block; cursor: pointer" @onclick="@(value => AddItem(row, value))">
+                                                <Icon Type="@IconType.Outline.Plus" />
+                                                Add Item
+                                            </a>
+                                        </div>
+                                    </div>
+                                </DropdownRender>
+                            </Select>
+                        }
+                        else
+                        {
+                            @(row.Specification?.Description ?? "无")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Specification.Unit" Title="单位" Width="150" Ellipsis>
+                                    <CellRender Context="cell">
+                    @{
+
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            if (row.InventoryItem != null && (row.Specification?.Unit == null || row.Specification?.Unit == string.Empty))
+                            {
+                                <Input @bind-Value="@row.Specification.Unit" />
+                            }
+                            else
+                            {
+                                @(row.Specification?.Unit ?? "无")
+                            }
+                        }
+                        else
+                        {
+                            @(row.Specification?.Unit ?? "无")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="150">
+                                    <CellRender Context="cell">
+                    @{
+
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <AntDesign.InputNumber @bind-Value="@row.Quantity" Precision="2" Min="0" Bordered="false" @bind-Value:after="() => QuantityChange(row)" Width="140px" />
+                        }
+                        else
+                        {
+                            @row.Quantity.ToString("F2")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Price" Title="单价" Align="ColumnAlign.Right" Width="150">
+                                    <CellRender Context="cell">
+                    @{
+
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <AntDesign.InputNumber @bind-Value="@row.Price" Bordered="false" Precision="4" Min="0" @bind-Value:after="() => PriceChange(row)" Width="140px" />
+                        }
+                        else
+                        {
+                            @row.Price.ToString("F4")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="150">
+                                    <CellRender Context="cell">
+                    @{
+
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <AntDesign.InputNumber @bind-Value="@row.Amount" Precision="4" Bordered="false" @bind-Value:after="() => PriceChange(row)" Width="140px" />
+                        }
+                        else
+                        {
+                            @row.Amount.ToString("F2")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.TaxRate" Title="税率" Align="ColumnAlign.Right" Width="80">
+                                    <CellRender Context="cell">
+                    @{
+
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <AntDesign.InputNumber Step=0.01M Min="0" Max="1" @bind-Value="@row.TaxRate" Bordered="false" @bind-Value:after="() => PriceIncTaxChange(row)" Width="70" />
+                        }
+                        else
+                        {
+                            @row.TaxRate.ToString("P2")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.PriceIncTax" Title="含税单价" Align="ColumnAlign.Right" Width="150">
+                <CellRender Context="cell">
+                    @{
+
+                        if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <AntDesign.InputNumber @bind-Value="@row.PriceIncTax" Precision="4" Bordered="false" @bind-Value:after="() => PriceIncTaxChange(row)" Width="140px" />
+                        }
+                        else
+                        {
+                            @row.PriceIncTax.ToString("F4")
+                        }
+                    }
+                </CellRender>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Align="ColumnAlign.Right" Width="200">
+                        @if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <AntDesign.InputNumber @bind-Value="@row.AmountIncTax" Precision="4" Bordered="false" @bind-Value:after="() => AmountIncTaxChange(row)" Width="190px" />
+                        }
+                        else
+                        {
+                            @row.AmountIncTax.ToString("F2")
+                        }
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Note" Title="备注" Align="ColumnAlign.Center" Ellipsis>
+                        @if (string.IsNullOrEmpty(Data.Approver))
+                        {
+                            <AntDesign.Input @bind-Value="@row.Note" Bordered="false" />
+                        }
+                        else
+                        {
+                            @(row.Note ?? "无")
+                        }
+            </PropertyColumn>
+
+            @if (string.IsNullOrEmpty(Data.Approver))
+            {
+                <ActionColumn Title="操作" Width="80px" Fixed="ColumnFixPlacement.Right">
+                            <Button Type="@ButtonType.Text" 
+                                    Danger 
+                                    Size="@ButtonSize.Small"
+                                    OnClick="() => DeleteRow(row)"
+                                    Disabled="@(Data.ITInvInOuts.Count <= 1)">
+                                删除
+                            </Button>
+                </ActionColumn>
+            }
+        </Table>
+    </FormItem>
+</Form>
+
+
+@code
+{
+    [Parameter]
+    public string? Code { get; set; }
+
+    bool ImageVisible = false;
+    string ImageUrl;
+    string TrxGrouptemp;
+    string Dept;
+    string WareH;
+    string InvCodeEdit;
+    TrxGroup _selectedItem;
+    int RowKey;
+    int index;
+    bool Modal_visible = false;
+    InventoryItem icInv;
+    List<InventoryItem> IcInvlist2;
+    string InvName;
+    IEnumerable<string> InvNames;
+    string SpeDesc = string.Empty;
+    bool _loading;
+    bool isApproved =false;
+
+    int oldInvCode = 0;
+    public string FinalRes { get; set; }
+    public string AllRes { get; set; }
+
+    List<TrxGroup> TrxGroups;
+    List<Department> Departments;
+    List<Employee> Emps;
+    List<Warehouse> Warehouses;
+    List<Company> Coms;
+    List<InventoryItem> Invs;
+    List<IcPrice> IcPrices;
+    List<IcPrice> IcPriceInsertlist = new();
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    public InventoryTransaction Data { get; set; } = new();
+    // 语音识别组件引用
+    private VoiceRecognition? voiceRecognition;
+
+    protected override void OnInitialized()
+    {
+        var db = new SqlClient().Db;
+        TrxGroups = db.Queryable<TrxGroup>().ToList();
+        Departments = db.Queryable<Models.Department>().ToList();
+        Emps = db.Queryable<Models.Employee>().ToList();
+        Coms = db.Queryable<Models.Company>().ToList();
+        Warehouses = db.Queryable<Models.Warehouse>().ToList();
+        Invs = db.Queryable<InventoryItem>()
+            .IncludesAllFirstLayer()
+            .ToList();
+        IcPrices = db.Queryable<Models.IcPrice>().ToList();
+        IcInvlist2 = Invs;
+
+        // 加载已有单据数据
+        Data = InventoryTransaction.Select(Code);
+        isApproved = !string.IsNullOrEmpty(Data.Approver);
+        // 初始化下拉选中文本
+        TrxGrouptemp = Data.TrxGroup?.Name;
+        Dept = Data.Department?.Name;
+        WareH = Data.Warehouse?.Name;
+
+        // 补2条空行方便编辑
+        for (int i = 1; i <= 2; i++)
+        {
+            Data.ITInvInOuts.Add(new ITInvInOut() { InventoryItem = new InventoryItem() });
+        }
+    }
+
+    #region 通用业务逻辑（和录入界面完全一致）
+    private void SpeChanged(ITInvInOut row, Specification value)
+    {
+        row.Specification = value;
+        string invCode = row.InventoryItem.Code;
+        if (value != null)
+        {
+            row.SKU = value.SKU;
+        }
+
+        if (Data.ITInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+
+    private void AddItem(ITInvInOut row, MouseEventArgs args)
+    {
+        if (!string.IsNullOrWhiteSpace(SpeDesc))
+        {
+            int newId = row.InventoryItem.Specifications.Count() + 1;
+            row.InventoryItem.Specifications.Add(
+                new Specification("")
+                {
+                    Description = SpeDesc,
+                    InvCode = row.InventoryItem.Code,
+                    IsDefault = false,
+                    ConversionRatio = decimal.Zero
+                }
+            );
+            SpeDesc = string.Empty;
+        }
+    }
+
+    private void OnSelectedItemChangedHandler(InventoryItem value, ITInvInOut row)
+    {
+        value.Specifications = Specification.Select(value.Code);
+        if (value.Specifications == null || !value.Specifications.Any())
+        {
+            Console.WriteLine("Specifications 未找到");
+            return;
+        }
+        row.SKU = value.Specifications.Where(x1 => x1.IsDefault == true).First().SKU;
+        row.Specification = value.Specifications.Where(x1 => x1.IsDefault == true).First();
+        row.InvCode = value.Code;
+        row.InventoryItem = value;
+        if (value != null)
+        {
+            InvCodeEdit = value.Code;
+            if (Data.TrxType >= 0) //入库单
+            {
+                //row.UpdatePrice(IcPriceByInvCode(row.InvCode));  //从价格表获取最新价格
+            }
+            else //出库单
+            {
+                row.Price = InventoryPricingExtension.CalculateOutboundPrice(Data.WarehouseCode, value.Code, row.SKU, row.Quantity, row.InventoryItem.CostingMethodCode);
+                row.PriceChange();
+            }
+        }
+
+        if (Data.ITInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+
+    private void OnRowClick(RowData<ITInvInOut> value)
+    {
+        RowKey = value.RowIndex;
+        index = value.RowIndex;
+    }
+
+    void IcTrxGroupChange(TrxGroup value)
+    {
+        _selectedItem = value;
+        Data.TrxGroupCode = value?.Code;
+        Data.TrxGroup = value;
+        Data.TrxType = value.TrxType;
+    }
+    void WarehouseChange(Warehouse value)
+    {
+        Data.WarehouseCode = value?.Code;
+    }
+    void DeptChange(Department value)
+    {
+        Data.DepartmentCode = value?.Code;
+    }
+    void EmpChange(Employee value)
+    {
+        Data.EmployeeCode = value?.Code;
+    }
+
+    void QuantityChange(ITInvInOut icInvInOut)
+    {
+        try
+        {
+            icInvInOut.Price = InventoryPricingExtension.CalculateOutboundPrice(Data.WarehouseCode, icInvInOut.InvCode, icInvInOut.SKU, icInvInOut.Quantity, icInvInOut.InventoryItem.CostingMethodCode);
+        }
+        catch (Exception e)
+        {
+            throw;
+        }
+        icInvInOut.QuantityChange();
+        icInvInOut.PriceChange();
+        Data.UpdateAmount();
+    }
+    void PriceChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.PriceChange();
+        Data.UpdateAmount();
+    }
+
+    private void PriceIncTaxChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.PriceIncTaxChange();
+        Data.UpdateAmount();
+    }
+
+    private void AmountChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.AmountChange();
+        Data.UpdateAmount();
+    }
+
+    private void AmountIncTaxChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.AmountIncTaxChange();
+        Data.UpdateAmount();
+    }
+
+    private decimal IcPriceByInvCode(string Code)
+    {
+        decimal Price = 0M;
+        foreach (IcPrice IcPrice in IcPrices.Where(x => x.InvCode == Code))
+        {
+            Price = IcPrice.Price;
+        }
+        return Price;
+    }
+
+    void addRow()
+    {
+        for (int i = 1; i <= 5; i++)
+        {
+            Data.ITInvInOuts.Add(new ITInvInOut() {InventoryItem = new InventoryItem()});
+        }
+    }
+
+    void DeleteRow(ITInvInOut row)
+    {
+        Data.ITInvInOuts.Remove(row);
+        Data.UpdateAmount();
+    }
+
+    void check()
+    {
+        if(Data.ITInvInOuts[index].InvCode is not null)
+        {
+            index++;
+            RowKey = index + 1;
+        }
+
+        if(FinalRes is not null){
+            icInv = Invs.Find(x => x.Name.Contains(FinalRes));
+            IcInvlist2 = Invs.Where(x => x.Name.Contains(FinalRes)).ToList();
+
+            if (icInv is not null){
+                Data.ITInvInOuts[index].InventoryItem = icInv;
+                Data.ITInvInOuts[index].InvCode = icInv.Code;
+                SqlClient SSC = new SqlClient();
+                InventoryBalance inventoryBalance = SSC.Db.Queryable<InventoryBalance>()
+                .Where(xyz => xyz.WarehouseCode == Data.WarehouseCode && xyz.InvCode == icInv.Code).First();
+                if (Data.TrxType >= 0) //入库单
+                {
+                    //Data.ITInvInOuts[index].UpdatePrice(IcPriceByInvCode(Data.ITInvInOuts[index].InvCode));  //从价格表获取最新价格
+                }
+                else //出库单
+                {
+                    Data.ITInvInOuts[index].PriceIncTax = inventoryBalance?.PriceIncTax ?? 0;  //从库存表获取最新价格
+                    Data.ITInvInOuts[index].Price = inventoryBalance?.Price ?? 0;
+                }
+                RowKey = RowKey + 1;
+                index = index + 1;
+            }
+        }
+    }
+    private void OnSelectedItem(InventoryItem value)
+    {
+        if (value != null)
+        {
+            icInv = value;
+            if (Data.ITInvInOuts[index].InvCode is null)
+            {
+                index--;
+                RowKey = index - 1;
+            }
+            SqlClient SSC = new SqlClient();
+            InventoryBalance inventoryBalance = SSC.Db.Queryable<InventoryBalance>().Where(xyz => xyz.WarehouseCode == Data.WarehouseCode && xyz.InvCode == value.Code).First();
+            InvCodeEdit = value.Code;
+            Data.ITInvInOuts[index].InventoryItem = value;
+            Data.ITInvInOuts[index].InvCode = value.Code;
+        }
+        foreach (ITInvInOut icInvInOut in Data.ITInvInOuts.Where(M => M.InventoryItem.Code != "0" && M.InventoryItem.Name == value.Name))
+        {
+            icInvInOut.InventoryItem = value;
+            icInvInOut.InvCode = value.Code;
+            if (Data.TrxType >= 0) //入库单
+            {
+                //icInvInOut.UpdatePrice(IcPriceByInvCode(icInvInOut.InvCode));  //从价格表获取最新价格
+            }
+            else //出库单
+            {
+                SqlClient SSC = new SqlClient();
+                icInvInOut.Price = InventoryPricingExtension.CalculateOutboundPrice(Data.WarehouseCode, value.Code, icInvInOut.SKU, icInvInOut.Quantity, icInvInOut.InventoryItem.CostingMethodCode);
+                icInvInOut.PriceChange();
+            }
+        }
+
+        if (Data.ITInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+    #endregion
+
+    #region 表单提交逻辑
+    private void Submit()
+    {
+        // 移除空行
+        Data.ITInvInOuts.RemoveAll(item => item.InvCode == null || item.Quantity == 0);
+        Data.UpdateInvPrice();
+
+        try
+        {
+            // 调用实体类的Update方法（自带事务和冲销逻辑）
+            Data.Update();
+            Modal_visible = true;
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"保存失败：{ex.Message}");
+        }
+    }
+
+    private void CancelEdit()
+    {
+        // 重新加载数据，放弃修改
+        var db = new SqlClient().Db;
+        Data = db.Queryable<InventoryTransaction>()
+            .IncludesAllFirstLayer()
+            .Includes(x => x.ITInvInOuts, x => x.InventoryItem, x => x.Specifications)
+            .First(it => it.Code == Code);
+        MessageService.Info("已放弃修改");
+    }
+
+    private void HandleOk()
+    {
+        Modal_visible = false;
+        // 返回查看页
+        NavManager.NavigateTo($"/ITView/{Data.Code}");
+    }
+    private void HandleCancel()
+    {
+        Modal_visible = false;
+    }
+    private void OnFinish(EditContext editContext)
+    {
+        Submit();
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        MessageService.Error("表单校验失败，请检查填写内容");
+    }
+
+    void GoBack()
+    {
+        NavManager.NavigateTo("/inventory_records");
+    }
+    #endregion
+
+    #region 语音识别逻辑
+    private Task HandleRecognitionResult(VoiceRecognition.RecognitionResult result)
+    {
+        string finalText = result.FinalTranscript;
+        FinalRes = finalText;
+        InvName = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleRecognitionResultForExp(VoiceRecognition.RecognitionResult result)
+    {
+        Data.Explanation = result.FinalTranscript;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleRecognitionError(string errorMsg)
+    {
+        Console.WriteLine($"语音识别失败: {errorMsg}");
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleRecognitionEnd()
+    {
+        Console.WriteLine("语音输入完成");
+        return Task.CompletedTask;
+    }
+
+    private async Task InvOnSearch(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            // if (_oldTask == null || _oldTask.IsCompleted)
+            // {
+            //     _loading = true;
+            //     StateHasChanged();
+            // }
+        }
+        _loading = false;
+        StateHasChanged();
+    }
+
+    List<string> speechToString(string value)
+    {
+        List<string> res = new List<string>();
+        var json = JsonDocument.Parse(value).RootElement;
+        var json2 = json.GetProperty("paragraphs");
+
+        foreach (JsonElement je in json2.EnumerateArray())
+        {
+            var sentences = je.GetProperty("sentences")[1];
+            var finalTranscript = sentences.GetProperty("finalTranscript");
+            Console.WriteLine($"结果: {finalTranscript.GetString()}");
+            if (finalTranscript.GetString() is not null)
+                res.Add(finalTranscript.GetString());
+        }
+        return res;
+    }
+    #endregion
+}

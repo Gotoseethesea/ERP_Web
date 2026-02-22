@@ -1,0 +1,665 @@
+﻿@page "/role-management"
+@using AntDesign
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@inject MessageService MessageService
+@inject ConfirmService _confirmService
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>功能角色管理</PageTitle>
+
+<Row Gutter="24">
+    <!-- 左侧角色列表 -->
+    <Col Span="8">
+        <Card Title="角色列表" Bordered>
+            <Input AllowClear 
+                   Placeholder="搜索角色..." 
+                   @bind-Value="@_searchText"/>
+                
+            <Button Type="ButtonType.Primary"
+                    Icon="plus-circle" 
+                    Block
+                    OnClick="ShowCreateModal">
+                新增角色
+            </Button>
+                
+            <AntList DataSource="@_filteredRoles" 
+                     Bordered>
+                <ChildContent Context="role">
+                <ListItem Actions="@BuildRoleActions(role)" Extra="@RoleTagExtra(role)">
+                        <Avatar Style="background-color: #722ed1">@GetRoleInitial(role.Name)</Avatar>
+                        <ListItemMeta Title="@role.Name"
+                                  Description="@role.Code" />
+                    </ListItem>
+                </ChildContent>
+            </AntList>
+        </Card>
+    @if (_checkedMenuKeys != null)
+    {
+        @foreach (var item in _checkedMenuKeys)
+        {
+            <Tag Color="TagColor.Blue" Style="margin-left:8px">@item</Tag>
+        }
+    }
+    <Tag Color="TagColor.Blue" Style="margin-left:8px">分离上面是_checked 下面是 TreeSelectKey</Tag>
+
+    @if (TreeSelectKey != null)
+    {
+        @foreach (var item in TreeSelectKey)
+        {
+            <Tag Color="TagColor.Blue" Style="margin-left:8px">@item</Tag>
+        }
+    }
+    </Col>
+
+    <!-- 右侧角色详情 -->
+    <Col Span="16">
+        @if (_selectedRole != null)
+        {
+            <Card Title="@_selectedRole?.Name" Bordered>
+                <Tabs>
+                    <!-- 权限分配 -->
+                    <TabPane Key="permissions" Tab="权限分配">
+                        <div style="display: flex; gap: 16px; height: 600px;">
+                            <!-- 菜单权限树 -->
+                            <div style="flex: 1; border-right: 1px solid #f0f0f0; padding-right: 16px;">
+                                <h3>菜单权限</h3>
+                                <Tree @ref="_menuTree"
+                                    TItem="TreeDataItem<AppMenu>"
+                                    DataSource="@_menuTreeData"
+                                    Multiple
+                                    Selectable
+                                    @bind-SelectedKeys="TreeSelectKey"
+                                    Checkable
+                                    @bind-CheckedKeys="_checkedMenuKeys"
+                                    BlockNode
+                                    KeyExpression="x => x.DataItem.Key"
+                                    TitleExpression="x => x.DataItem.Title"
+                                    ChildrenExpression="x => x.DataItem.Children">
+                                    <TitleTemplate>
+                                        <div style="display: flex; align-items: center;">
+                                            <Icon Type="@context.DataItem.Data.Icon" />
+                                            <span style="margin-left:8px">@context.Title</span>
+                                            <Tag Color="TagColor.Blue" Style="margin-left:8px">@context.DataItem.Data.Code</Tag>
+                                        </div>
+                                    </TitleTemplate>
+                                </Tree>
+                        @if (_checkedMenuKeys != null)
+                        {
+                            @foreach (var item in _checkedMenuKeys)
+                            {
+                                <Tag Color="TagColor.Blue" Style="margin-left:8px">@item</Tag>
+                            }
+                        }
+                        <Tag Color="TagColor.Blue" Style="margin-left:8px">分离上面是_checked 下面是 TreeSelectKey</Tag>
+
+                        @if (TreeSelectKey != null)
+                        {
+                            @foreach (var item in TreeSelectKey)
+                            {
+                                <Tag Color="TagColor.Blue" Style="margin-left:8px">@item</Tag>
+                            }
+                        }
+                            </div>
+
+
+                            <!-- 按钮权限 -->
+                            <div style="flex: 1; padding-left: 16px;">
+                                <h3>按钮权限</h3>
+                                <div style="max-height: 500px; overflow-y: auto;">
+                                    <Collapse Accordion>
+                                        @foreach (var page in _buttonPermissions)
+                                        {
+                                            <Panel Header="PageTitle">
+                                                <Space Direction="SpaceDirection.Vertical" Style="width: 100%;">
+                                                    @foreach (var button in page.Buttons)
+                                                    {
+                                                        <Checkbox @bind-Checked="@button.IsAssigned"
+                                                            Disabled="@button.IsFixed">
+                                                            @button.DisplayText
+                                                        </Checkbox>
+                                                    }
+                                                </Space>
+                                            </Panel>
+                                        }
+                                    </Collapse>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 保存按钮 -->
+                        <div style="margin-top: 16px; text-align: right;">
+                            <Button Type="ButtonType.Primary" 
+                                    OnClick="SavePermissions"
+                                    Loading="@_saving">
+                                保存权限
+                            </Button>
+                        </div>
+                    </TabPane>
+                    
+                    <!-- 角色基本信息 -->
+                    <TabPane Key="basic" Tab="基本信息">
+                        <RoleForm Role="@_selectedRole"
+                                  OnSave="UpdateRole"
+                                  OnCancel="DeselectRole" />
+                    </TabPane>
+                    
+                    <!-- 关联用户 -->
+                    <TabPane Key="users" Tab="关联用户">
+                        <Card Title="拥有此角色的用户">
+                            @if (_roleUsers.Any())
+                            {
+                                <AntList DataSource="@_roleUsers" Bordered>
+                                    <ChildContent Context="user">
+                                        <Avatar Style="background-color: #1890ff">@GetRoleInitial(user.Name)</Avatar>
+                                        <ListItem>
+                                            <ListItemMeta Title="@user.Name"
+                                                            Description="@user.Account" />
+                                        </ListItem>
+                                    </ChildContent>
+                                </AntList>
+                            }
+                            else
+                            {
+                                <Empty Description=@("暂无用户拥有此角色") />
+                            }
+                        </Card>
+                    </TabPane>
+                </Tabs>
+            </Card>
+        }
+        else
+        {
+            <Card Title="请选择角色" Bordered>
+                <Empty Description=@("从左侧列表选择角色进行管理") />
+            </Card>
+        }
+    </Col>
+</Row>
+
+<!-- 新增角色模态框 -->
+<Modal @ref="_createModal"
+       Title="新增角色"
+       OnOk="CreateRole"
+       OnCancel="CloseCreateModal">
+    <RoleForm Role="@_newRole" 
+              OnSave="CreateRole" 
+              OnCancel="CloseCreateModal" />
+</Modal>
+
+@code {
+    // 状态管理
+    private List<Role> _allRoles = new();
+    private List<Role> _filteredRoles = new();
+    private Role _selectedRole;
+    private Role _newRole = new();
+    private string _searchText = "";
+    private Modal _createModal;
+    private bool _saving = false;
+
+    // 权限数据
+    //private Tree<AppMenu> _menuTree;
+    private Tree<TreeDataItem<AppMenu>> _menuTree;
+
+    //private List<AppMenu> _menuTreeData = new();
+    private IEnumerable<TreeDataItem<AppMenu>> _menuTreeData = new List<TreeDataItem<AppMenu>>();
+    private string[] TreeSelectKey;
+    private string[] _checkedMenuKeys = Array.Empty<string>();
+    private List<PageButtons> _buttonPermissions = new();
+
+    private void SelectedKeysChanged()
+    {
+        MessageService.Info("选择后，加载菜单");
+    }
+
+    // 关联用户
+    private List<User> _roleUsers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoles();
+        //await LoadRoles();
+        await LoadMenuData();
+        MessageService.Info("第一次加载");
+    }
+
+    private async Task LoadRoles()
+    {
+        try
+        {
+            _allRoles = Role.Select(); // 获取所有角色
+            _filteredRoles = _allRoles;
+
+            // 加载用户数据
+            _allRoles = Role.Select(); // 获取所有角色
+            _filteredRoles = _allRoles;
+            var menus = AppMenu.Select();
+
+            // 构建根菜单（ParentId=0）
+            var rootMenus = menus.Where(m => m.ParentId == 0).ToList();
+
+            // // 加载菜单数据
+            _menuTreeData = BuildTreeData(rootMenus, menus);
+            MessageService.Info("加载菜单");
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"角色加载失败: {ex.Message}");
+        }
+    }
+
+    private async Task LoadMenuData()
+    {
+        try
+        {
+            // 加载菜单数据
+            var sqlClient = new SqlClient();
+            var menus = sqlClient.Db.Queryable<AppMenu>()
+                .Where(m => m.Active)
+                .ToTree(it => it.Children, it => it.ParentId, 0)
+                .ToList();
+
+            _menuTreeData = ConvertToTreeData(menus);
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"菜单加载失败: {ex.Message}");
+        }
+    }
+
+    // 添加树节点数据结构
+    public class TreeDataItem<T>
+    {
+        public string Key { get; set; }
+        public string Title { get; set; }
+        public string Icon { get; set; }
+        public T Data { get; set; }
+        public IEnumerable<TreeDataItem<T>> Children { get; set; }
+
+        // 扁平化树结构的方法
+        public IEnumerable<TreeDataItem<T>> Flatten()
+        {
+            yield return this;
+            if (Children != null)
+            {
+                foreach (var child in Children.SelectMany(c => c.Flatten()))
+                {
+                    yield return child;
+                }
+            }
+        }
+    }
+    // 构建树形数据方法
+    private IEnumerable<TreeDataItem<AppMenu>> BuildTreeData(List<AppMenu> rootMenus, List<AppMenu> allMenus)
+    {
+        return rootMenus.Select(menu => new TreeDataItem<AppMenu>
+        {
+            Key = menu.Id.ToString(),
+            Title = menu.Name,
+            Icon = menu.Icon,
+            Data = menu,
+            Children = BuildTreeData(
+                allMenus.Where(m => m.ParentId == menu.Id).ToList(),
+                allMenus
+            )
+        }).ToList();
+    }
+
+    // 将菜单转换为树形结构数据
+    private IEnumerable<TreeDataItem<AppMenu>> ConvertToTreeData(List<AppMenu> menus)
+    {
+        return menus.Select(menu => new TreeDataItem<AppMenu>
+        {
+            Key = menu.Id.ToString(),
+            Title = menu.Name,
+            Data = menu,
+            Icon = menu.Icon,
+            Children = menu.Children?.Count > 0 ? ConvertToTreeData(menu.Children) : null
+        });
+    }
+
+    // 角色首字母
+    private string GetRoleInitial(string name) => 
+        !string.IsNullOrEmpty(name) ? name[0].ToString() : "R";
+
+    // 角色操作按钮
+    private RenderFragment[] BuildRoleActions(Role role)
+    {
+        return new RenderFragment[]
+        {
+            builder => // 编辑按钮
+            {
+                builder.OpenComponent<Button>(0);
+                builder.AddAttribute(1, "Type", ButtonType.Link);
+                builder.AddAttribute(2, "Icon", "edit");
+                builder.AddAttribute(3, "OnClick", EventCallback.Factory.Create<MouseEventArgs>(this, () => SelectRole(role)));
+                builder.CloseComponent();
+            },
+            builder => // 删除按钮
+            {
+                builder.OpenComponent<Button>(0);
+                builder.AddAttribute(1, "Type", ButtonType.Link);
+                builder.AddAttribute(2, "Icon", "delete");
+                builder.AddAttribute(3, "Danger", true);
+                builder.AddAttribute(4, "OnClick", EventCallback.Factory.Create<MouseEventArgs>(this, () => DeleteRole(role)));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    // 角色选择
+    private async void SelectRole(Role role)
+    {
+        _selectedRole = role;
+        await LoadRoleDetails();
+    }
+
+    private async Task LoadRoleDetails()
+    {
+        if (_selectedRole == null) return;
+
+        try
+        {
+            // 加载角色权限
+            var rolePermissions = await GetRolePermissions(_selectedRole.Id);
+            var rolePermissions2 = _selectedRole.Permissions.Select(xx => xx.PermissionKey).ToList();
+            // 设置菜单选中状态
+
+            var AllNode = _menuTreeData.SelectMany(m => m.Flatten()).Select(x => x.Data).ToList(); // 获取所有节点
+            var AllFaNode = AllNode.Select(xx=>xx.ParentId).ToArray();
+            //var AllLastNode = AllNode.Where(xx=>!AllFaNode.Contains(xx.Id)).ToList();
+            var selectnode = AllNode.Where(x => rolePermissions2.Contains(x.PermissionKey) && !AllFaNode.Contains(x.Id)); // 获取权限表中有权限的末级节点
+
+            var checkedKeys = _menuTreeData
+            .SelectMany(m => m.Flatten()) // 这里假设TreeDataItem<AppMenu>实现了Flatten方法，返回所有节点
+            .Where(menu => !string.IsNullOrEmpty(menu.Data.PermissionKey) && rolePermissions2.Contains(menu.Data.PermissionKey) && (menu.Data.Children == null || menu.Data.Children?.Count() == 0))  //过滤掉非末级节点，防止默认选中所有下级节点
+            .Select(menu => menu.Key) // 注意：这里使用节点的Key，即菜单ID的字符串形式，并非Permission 权限表中的Id
+            .ToArray();
+            checkedKeys = selectnode.Select(x => x.Id.ToString()).ToArray();// 这里直接使用菜单ID作为Key，确保与Tree组件的Key一致
+
+            _checkedMenuKeys = checkedKeys;
+
+            // 加载菜单权限
+            await LoadRoles();
+            // 加载按钮权限
+            await LoadButtonPermissions(rolePermissions);
+
+            // 加载关联用户
+            _roleUsers = _selectedRole.users?.ToList() ?? new List<User>();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"角色详情加载失败: {ex.Message}");
+        }
+    }
+
+    // 递归展开所有菜单节点
+    private List<AppMenu> Flatten(List<AppMenu> menus)
+    {
+        var result = new List<AppMenu>();
+        foreach (var menu in menus)
+        {
+            result.Add(menu);
+            if (menu.Children != null && menu.Children.Any())
+            {
+                result.AddRange(Flatten(menu.Children));
+            }
+        }
+        return result;
+    }
+
+    // 获取角色权限
+    private async Task<HashSet<string>> GetRolePermissions(int roleId)
+    {
+        var sqlClient = new SqlClient();
+        return new HashSet<string>(sqlClient.Db.Queryable<RolePermission, Permission>(
+                (rp, p) => rp.PermissionId == p.Id && rp.RoleId == roleId
+            )
+            .Select((rp, p) => p.PermissionKey)
+            .ToList());
+    }
+
+    // 加载按钮权限
+    private async Task LoadButtonPermissions(HashSet<string> rolePermissions)
+    {
+        try
+        {
+            var sqlClient = new SqlClient();
+
+            // 获取所有按钮
+            var allButtons = sqlClient.Db.Queryable<SysButton>().ToList();
+            var allPages = sqlClient.Db.Queryable<SysPage>().ToList();
+
+            // 组织按页面分组
+            _buttonPermissions = allPages.Select(page => new PageButtons
+            {
+                PageId = page.Id,
+                PageName = page.DisplayName,
+                Buttons = allButtons
+                    .Where(b => b.PageId == page.Id)
+                    .Select(b => new ButtonPermission
+                    {
+                        ButtonId = b.Id,
+                        DisplayText = b.DisplayText,
+                        Icon = b.IconType,
+                        PermissionKey = b.PermissionKey,
+                        IsAssigned = rolePermissions.Contains(b.PermissionKey),
+                        IsFixed = false
+                    })
+                    .ToList()
+            })
+            .Where(p => p.Buttons.Count > 0)
+            .ToList();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"按钮权限加载失败: {ex.Message}");
+        }
+    }
+
+    private void DeselectRole() => _selectedRole = null;
+
+    // 角色搜索
+    private void OnSearch(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _filteredRoles = _allRoles;
+            return;
+        }
+
+        _filteredRoles = _allRoles
+            .Where(r => r.Name.Contains(value, StringComparison.OrdinalIgnoreCase) || 
+                       (r.Code != null && r.Code.Contains(value, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    // 角色操作
+    private void ShowCreateModal()
+    {
+        _newRole = new Role(); // 重置表单
+        _createModal.Visible = true;
+    }
+
+    private void CloseCreateModal() => _createModal.Visible = false;
+
+    private async Task CreateRole()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_newRole.Name))
+            {
+                MessageService.Error("角色名称不能为空");
+                return;
+            }
+
+            _newRole.Insert();
+            MessageService.Success("角色创建成功");
+            CloseCreateModal();
+            await LoadRoles();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"角色创建失败: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateRole()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_selectedRole.Name))
+            {
+                MessageService.Error("角色名称不能为空");
+                return;
+            }
+
+            _selectedRole.Update();
+            MessageService.Success("角色信息已更新");
+            await LoadRoles();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"更新失败: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteRole(Role role)
+    {
+        try
+        {
+            // 使用 ConfirmService 创建确认对话框
+            var confirmResult = await _confirmService.Show(
+                title: "确认删除",
+                content: $"确定删除角色 '{role.Name}' 吗？"
+            );
+
+            // 检查用户是否点击了确定
+            if (confirmResult == ConfirmResult.OK)
+            {
+                // 检查是否有关联用户
+                var userCount = role.users?.Count ?? 0;
+                if (userCount > 0)
+                {
+                    MessageService.Error($"无法删除，该角色已被 {userCount} 个用户使用");
+                    return;
+                }
+
+                // 执行删除
+                role.Delete();
+                MessageService.Success("角色已删除");
+
+                if (_selectedRole?.Id == role.Id)
+                {
+                    DeselectRole();
+                }
+                await LoadRoles();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"删除失败: {ex.Message}");
+        }
+    }
+
+    // 保存权限
+    private async Task SavePermissions()
+    {
+        if (_selectedRole == null) return;
+
+        _saving = true;
+
+        try
+        {
+            var sqlClient = new SqlClient();
+            var db = sqlClient.Db;
+
+            // 开始事务
+            db.BeginTran();
+
+            // 1. 删除角色所有现有权限
+            db.Deleteable<RolePermission>()
+                .Where(rp => rp.RoleId == _selectedRole.Id)
+                .ExecuteCommand();
+
+            var allNodes = _menuTreeData.SelectMany(m => m.Flatten())
+                .Select(menu => menu.Data)
+                .ToList(); // 获取所有菜单节点数据
+
+            var selectedPermissions = _checkedMenuKeys.Select(xx => AppMenu.GetParentPermissionKeys(allNodes, xx)).SelectMany(x => x).Distinct()
+                .ToList(); // 获取选中菜单的上级菜单权限Key列表，并合并到selectedPermissions中
+
+            // 获取选中的按钮权限
+            var buttonPermissions = _buttonPermissions
+                .SelectMany(p => p.Buttons)
+                .Where(b => b.IsAssigned)
+                .Select(b => b.PermissionKey)
+                .Distinct()
+                .ToList();
+
+            // 合并权限
+            var allPermissions = selectedPermissions.Concat(buttonPermissions).ToList();
+
+            // 获取权限
+            var permissions = db.Queryable<Permission>()
+                .Where(p => allPermissions.Contains(p.PermissionKey))
+                .Distinct()
+                .ToList();
+
+            // 插入新权限
+            if (permissions.Any())
+            {
+                var rolePermissions = permissions.Select(p => new RolePermission
+                {
+                    RoleId = _selectedRole.Id,
+                    PermissionId = p.Id
+                }).ToList();
+                db.Insertable(rolePermissions).ExecuteCommand();
+            }
+            // 提交事务
+            db.CommitTran();
+            
+            MessageService.Success("权限保存成功");
+        }
+        catch (Exception ex)
+        {
+            var sqlClient = new SqlClient();
+            sqlClient.Db.RollbackTran();
+            MessageService.Error($"权限保存失败: {ex.Message}");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+    
+    // 数据结构
+    public class PageButtons
+    {
+        public int PageId { get; set; }
+        public string PageName { get; set; }
+        public List<ButtonPermission> Buttons { get; set; }
+    }
+    
+    public class ButtonPermission
+    {
+        public int ButtonId { get; set; }
+        public string DisplayText { get; set; }
+        public string Icon { get; set; }
+        public string PermissionKey { get; set; }
+        public bool IsAssigned { get; set; }
+        public bool IsFixed { get; set; }
+    }
+
+    private RenderFragment RoleTagExtra(Role role) => builder =>
+    {
+        builder.OpenComponent<Tag>(0);
+        builder.AddAttribute(1, "ChildContent", (RenderFragment)(contentBuilder =>
+        {
+            contentBuilder.AddContent(2, $"{role.Permissions?.Count ?? 0} 项");
+        }));
+        builder.CloseComponent();
+    };
+}

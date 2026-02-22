@@ -1,0 +1,136 @@
+﻿@* ================ 公司管理页面 (CompanyManagement.razor) ================ *@
+@page "/company-management"
+@using ERP_Web.Models
+@using AntDesign
+@using ERP_Web.Repository
+@inject MessageService MessageService
+
+<PageHeader Title="公司管理" SubTitle="管理系统中的公司信息">
+    <ButtonGroup>
+        <Button Type="ButtonType.Primary" Icon="plus" OnClick="ShowAddModal">新增公司</Button>
+    </ButtonGroup>
+</PageHeader>
+
+<Card>
+    <Table DataSource="@companies" TItem="Company" Context="row" Bordered="true" Size="TableSize.Small">
+        <PropertyColumn Title="代码" Property="c => c.Code" />
+        <PropertyColumn Title="名称" Property="c => c.Name" />
+        <PropertyColumn Title="类型" Property="c => c.CompanyType" />
+        <PropertyColumn Title="税号" Property="c => c.TaxId" />
+        <ActionColumn Title="操作" Width="200px">
+            <Template>
+                @{
+                    var company = (Company)row;
+                    <Space>
+                        <Button Type="ButtonType.Link" Size="ButtonSize.Small" Icon="edit"
+                                OnClick="() => ShowEditModal(company)">
+                            编辑
+                        </Button>
+                        <Button Type="ButtonType.Link" Size="ButtonSize.Small" Danger Icon="delete"
+                                OnClick="() => DeleteCompany(company)">
+                            删除
+                        </Button>
+                    </Space>
+                }
+            </Template>
+        </ActionColumn>
+    </Table>
+</Card>
+
+<Modal Title="@(isEditing ? "编辑公司" : "新增公司")"
+       Visible="@modalVisible"
+       OnCancel="CloseModal"
+       OnOk="SaveCompany">
+    <Form Model="@currentCompany">
+        <FormItem Label="公司代码" Required>
+            <Input @bind-Value="@currentCompany.Code" />
+        </FormItem>
+        <FormItem Label="公司名称" Required>
+            <Input @bind-Value="@currentCompany.Name" />
+        </FormItem>
+        <FormItem Label="公司性质">
+            <Input @bind-Value="@currentCompany.CompanyType" />
+        </FormItem>
+        <FormItem Label="税号">
+            <Input @bind-Value="@currentCompany.TaxId" />
+        </FormItem>
+        <FormItem Label="备注">
+            <Input @bind-Value="@currentCompany.Note" />
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    private List<Company> companies = new();
+    private Company currentCompany = new();
+    private bool modalVisible = false;
+    private bool isEditing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        companies = Company.Select();
+    }
+
+    private void ShowAddModal()
+    {
+        currentCompany = new Company();
+        isEditing = false;
+        modalVisible = true;
+    }
+
+    private void ShowEditModal(Company company)
+    {
+        currentCompany = company;
+        isEditing = true;
+        modalVisible = true;
+    }
+
+    private void CloseModal() => modalVisible = false;
+
+    private async Task SaveCompany()
+    {
+        if (string.IsNullOrWhiteSpace(currentCompany.Code))
+        {
+            MessageService.Error("公司代码不能为空");
+            return;
+        }
+
+        try
+        {
+            SqlClient sqlClient = new SqlClient();
+
+            if (isEditing)
+            {
+                await sqlClient.Db.Updateable(currentCompany).ExecuteCommandAsync();
+                MessageService.Success("公司信息更新成功");
+            }
+            else
+            {
+                await sqlClient.Db.Insertable(currentCompany).ExecuteCommandAsync();
+                MessageService.Success("公司添加成功");
+            }
+
+            await LoadData();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"操作失败: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteCompany(Company company)
+    {
+        SqlClient sqlClient = new SqlClient();
+
+        company.Active = false;
+        await sqlClient.Db.Updateable(company).ExecuteCommandAsync();
+        MessageService.Success("公司已标记为无效");
+        await LoadData();
+    }
+}

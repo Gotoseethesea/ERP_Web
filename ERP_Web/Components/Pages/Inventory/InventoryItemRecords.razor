@@ -1,0 +1,431 @@
+﻿@page "/inventoryitem"
+@using ERP_Web.Components.Custom
+@using ERP_Web.Components.Pages.Setting.Inventory
+@using ERP_Web.Repository
+@using M = ERP_Web.Models
+@inject IMessageService _message
+@inject ReuseTabsService ReuseTabsService
+<PageHeader Title="存货管理" SubTitle="管理系统中所有存货档案"></PageHeader>
+<Button OnClick="Refresh" Type="ButtonType.Primary" Style="margin-bottom:16px"> 刷新存货</Button>
+<Button OnClick="AddNew" Type="ButtonType.Primary" Style="margin-bottom:16px"> 新增存货</Button>
+<Button OnClick="AddRow" Type="ButtonType.Primary" Style="margin-bottom:16px"> 插入行 </Button>
+<Checkbox @bind-Checked="@isvisibleImage">显示图片</Checkbox>
+@* 单独新建 *@
+@if (isvisible == false)
+{ }
+else
+{
+    <Table DataSource="@invsAdd" TItem="M.InventoryItem" Context="row" Size="TableSize.Small" HidePagination Bordered ScrollX="1500" StickyOffsetHeader="64">
+        <PropertyColumn Property="c => c.Code">
+            <Input @bind-Value="@row.Code" />
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Name">
+            <Input @bind-Value="@row.Name" />
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Specifications[0].Description">
+            <Input @bind-Value="@row.Specifications[0].Description" />
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Specifications[0].Unit">
+            <Input @bind-Value="@row.Specifications[0].Unit" />
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Category">
+            <SimpleSelect @bind-Value=@row.CategoryCode Style="width: 200px;" OnSelectedItemChanged="() => OnItemChanged(row)">
+                <SelectOptions>
+                    @foreach (M.Category item in categories)
+                    {
+                        <SimpleSelectOption Value="@item.Code" Label="@(item.Code + "." + item.Name)"></SimpleSelectOption>
+                    }
+                </SelectOptions>
+            </SimpleSelect>
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.CostingMethod">
+            <SimpleSelect @bind-Value=@row.CostingMethodCode Style="width: 200px;" OnSelectedItemChanged="() => OnInvCMChanged(row)">
+                <SelectOptions>
+                    @foreach (var item in InvCM)
+                    {
+                        <SimpleSelectOption Value="@item.Code" Label="@(item.Code + "." + item.Name)"></SimpleSelectOption>
+                    }
+                </SelectOptions>
+            </SimpleSelect>
+        </PropertyColumn>
+        @if (isvisibleImage == true)
+        {
+            <PropertyColumn Property="c => c.Image">
+                <ImageUploader @bind-ImageUrl="@row.Image" />
+            </PropertyColumn>
+        }
+    </Table>
+    <Button OnClick="Save" Type="ButtonType.Primary" Style="margin-bottom:16px"> 保存 </Button>
+}
+@code {
+    bool isvisible = false;
+    bool isvisibleImage = false;
+    List<M.InventoryItem> invs = M.InventoryItem.Select();
+    List<M.InventoryItem> invsAdd = new List<M.InventoryItem>();
+    List<M.Category> categories = M.Category.Select();
+    List<M.InventoryCostingMethod> InvCM = M.InventoryCostingMethod.Select();
+    M.IcInv context = new M.IcInv();
+
+    void AddNew()
+    {
+        if (isvisible == false)
+        {
+            isvisible = true;
+        }
+        else
+        {
+            isvisible = false;
+            //AddIcInv.clear();
+        }
+    }
+    void AddRow()
+    {
+        invsAdd.Add(new M.InventoryItem("") { Specifications = new List<M.Specification>() });
+        M.Specification spec = new M.Specification("") { Description = "", Unit = "" };
+        invsAdd.Last().Specifications.Add(spec);
+    }
+    void Save()
+    {
+        foreach (var item in invsAdd)
+        {
+            item.Insert();
+        }
+        invsAdd.Clear();
+        isvisible = false;
+        if (_selectedRows.Count() > 0)
+        {
+            foreach (var itemView in _selectedRows)
+            {
+                itemView.Update();
+            }
+        }
+    }
+    private void OnItemChanged(M.InventoryItem row)
+    {
+        //categories = categoryRepository.GetList();
+        row.CategoryCode = row.CategoryCode;
+        row.Category = row.Category;
+        Console.WriteLine($"{row.Category}");
+    }
+    private void OnInvCMChanged(M.InventoryItem row)
+    {
+        //categories = categoryRepository.GetList();
+        row.CostingMethodCode = row.CostingMethodCode;
+        row.CostingMethod = row.CostingMethod;
+        Console.WriteLine($"{row.CostingMethod}");
+    }
+}
+
+<Table DataSource="Data" RowClassName="@(_ => "editable-row")"
+       Bordered PageSize="30"
+       TItem="M.InventoryItem"
+       ScrollX="1500" StickyOffsetHeader="64"
+       @bind-SelectedRows="_selectedRows"
+       Size="TableSize.Small">
+    <ColumnDefinitions>
+        <Selection Width="50" />
+        <PropertyColumn Width="150" Property="c => c.Code" Sortable>
+            @if (editCode == context.Code)
+            {
+                <Input @bind-Value="context.Code" OnBlur="stopEdit" AutoFocus />
+            }
+            else
+            {
+                <div class="editable-cell-value-wrap" style="padding-right:24px" @onclick="() => startEdit(context.Code)">
+                    @context.Code
+                </div>
+            }
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Name" Width="100">
+            @if (editCode == context.Code)
+            {
+                <Input @bind-Value="context.Name" OnBlur="stopEdit" AutoFocus />
+            }
+            else
+            {
+                <div class="editable-cell-value-wrap" style="padding-right:24px" @onclick="() => startEdit(context.Code)">
+                    @context.Name
+                </div>
+            }
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Specifications[0].Description" Width="200"></PropertyColumn>
+        <PropertyColumn Property="c => c.Specifications[0].Unit" Width="50"></PropertyColumn>
+        <PropertyColumn Property="c => c.Specifications[0].ConversionRatio" Title="转换率" Width="100"></PropertyColumn>
+        <PropertyColumn Property="c => c.CategoryCode" Sortable Width="100"></PropertyColumn>
+        <PropertyColumn Property="c => c.Category.Name" Width="100"></PropertyColumn>
+        <PropertyColumn Property="c => c.CostingMethod.Name" Width="200"></PropertyColumn>
+        @if (isvisibleImage == true)
+        {
+            <PropertyColumn Property="c => c.Image" Width="200" Title="图片">
+                @if (@context.Image != null)
+                {
+                    <ImageUploader ImageUrl="@context.Image" ImageUrlChanged="@(url => context.Image = url)" />
+                }
+            </PropertyColumn>
+        }
+        <PropertyColumn Property="c => c.InsertUser" Width="100"></PropertyColumn>
+        <PropertyColumn Property="c => c.UpdateTime" Width="200"></PropertyColumn>
+        <PropertyColumn Property="c => c.Active" Width="100"></PropertyColumn>
+        <ActionColumn Title="操作" Width="200">
+            <Space>
+                <Button Type="@ButtonType.Primary" Size="@ButtonSize.Small"
+                        OnClick="() => ShowManagementDialog(context)">
+                    管理
+                </Button>
+                <Button Size="@ButtonSize.Small" OnClick="@(e => ShowEditDialog(context))">
+                    编辑
+                </Button>
+                <Popconfirm Title="确定删除此商品？" OnConfirm="@(e => DeleteItem(context))">
+                    <Button Size="@ButtonSize.Small" Danger>删除</Button>
+                </Popconfirm>
+            </Space>
+        </ActionColumn>
+    </ColumnDefinitions>
+
+    <ExpandTemplate Context="attr">
+        <Tabs ActiveKey="@activeTabKey">
+            <TabPane Key="spec" Tab="规格">
+                <AntDesign.Table DataSource="@attr.Data.Specifications" TItem="M.Specification" Loading="@loading" Context="SpeRow">
+                    <PropertyColumn Property="@(c => c.SKU)" Title="SKU" />
+                    <PropertyColumn Property="@(c => c.Description)" Title="规格描述" />
+                    <PropertyColumn Property="@(c => c.Unit)" Title="单位" />
+                    <PropertyColumn Property="@(c => c.ConversionRatio)" Title="换算率" />
+                    <PropertyColumn Property="@(c => c.IsDefault)" Title="默认规格">
+                        @if (SpeRow.IsDefault == true)
+                        {
+                            <Tag Color="TagColor.Green">是</Tag>
+                        }
+                        else
+                        {
+                            <Tag Color="TagColor.Default">否</Tag>
+                        }
+                    </PropertyColumn>
+                </AntDesign.Table>
+            </TabPane>
+            <TabPane Key="attr" Tab="属性">
+                @if(attr.Data.Attributes != null)
+                {
+                    <Table DataSource="@attr.Data.Attributes" TItem="M.InvAttribute" Loading="@loading" Context="AttRow">
+                        <PropertyColumn Property="c => c.Id" />
+                        <PropertyColumn Property="c => c.InvCode"/>
+                        <PropertyColumn Property="c => c.Attribute"/>
+                        <PropertyColumn Property="c => c.Active" />
+                        <PropertyColumn Property="c => c.Options"> 
+                            @if (AttRow.Options != null)
+                            {
+                                @foreach(var item in AttRow.Options)
+                                {
+                                    <Tag Color="TagColor.Blue">
+                                        @item.Value
+                                    </Tag>
+                                }
+                            }
+                        </PropertyColumn>
+                    </Table>
+                }
+            </TabPane>
+        </Tabs>
+    </ExpandTemplate>
+</Table>
+
+<!-- 商品管理模态框 -->
+<Modal Title="@($"商品管理 - {(activeItem != null ? activeItem.Name : "")}")"
+       Visible="@Visi"
+       OnCancel="CloseManagementDialog"
+       Width="800"
+       Footer="@null">
+    <Tabs ActiveKey="@activeTabKey">
+        <TabPane Key="spec" Tab="规格管理">
+            <SpecificationManager InvCode="@activeItem.Code"
+                                  OnSpecUpdated="HandleSpecUpdated" />
+        </TabPane>
+        <TabPane Key="attr" Tab="属性管理">
+            <AttributeManager InvCode="@activeItem.Code"
+                              OnAttributeUpdated="HandleAttributeUpdated" />
+        </TabPane>
+    </Tabs>
+</Modal>
+
+<!-- 商品编辑对话框 -->
+<InventoryItemEditDialog @ref="editDialog"
+                         OnSave="HandleItemSaved" />
+@code {
+    // 商品列表相关状态
+    private InventoryItemEditDialog? editDialog;
+    private List<M.InventoryItemView> allItems = new();
+    private List<M.InventoryItemView> filteredItems = new();
+    private bool loading = true;
+    private bool Visi = false;
+    private string searchText = "";
+    // 管理模态框相关状态
+    private M.InventoryItem? activeItem;
+    private string activeTabKey = "spec";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    public async Task Refresh2()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        StateHasChanged();
+        try
+        {
+            //allItems = await InventoryItemService.GetAll();
+            ApplyFilter();
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            filteredItems = allItems;
+        }
+        else
+        {
+            filteredItems = allItems.Where(i =>
+                i.Code.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                i.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    private void HandleSearch(string value)
+    {
+        searchText = value;
+        ApplyFilter();
+    }
+
+    private void ShowAddDialog()
+    {
+        editDialog?.Show(new M.InventoryItem());
+    }
+
+    private void ShowEditDialog(M.InventoryItem item)
+    {
+        editDialog?.Show(item);
+    }
+
+    private async Task DeleteItem(M.InventoryItem item)
+    {
+        item.Delete();
+        //await InventoryItemService.Delete(item.Code);
+        await LoadData();
+    }
+
+    private async Task HandleItemSaved()
+    {
+        await LoadData();
+    }
+
+    // 打开管理模态框
+    private void ShowManagementDialog(M.InventoryItem item)
+    {
+        activeItem = item;
+        Visi = true;
+        activeTabKey = "spec"; // 每次打开默认显示规格管理
+        StateHasChanged();
+    }
+
+    // 关闭管理模态框
+    private void CloseManagementDialog()
+    {
+        //activeItem = null;
+        Visi = false;
+        //StateHasChanged();
+    }
+    // 标签切换
+    private void OnTabChange(string key)
+    {
+        activeTabKey = key;
+    }
+    // 规格更新后的处理
+    private void HandleSpecUpdated()
+    {
+        // 可以在这里刷新商品列表，或者只是刷新当前管理模态框内的内容
+        StateHasChanged();
+    }
+
+    // 属性更新后的处理
+    private void HandleAttributeUpdated()
+    {
+        StateHasChanged();
+    }
+}
+@code {
+    List<M.InventoryItem> DbInvs = new List<M.InventoryItem>();
+    List<M.InventoryItemView> DbInvViews = new List<M.InventoryItemView>();
+    List<M.InventoryItem> Data = new List<M.InventoryItem>();
+    // private List<M.InventoryItem> _selectedRows = new List<M.InventoryItem>();
+    IEnumerable<M.InventoryItem> _selectedRows = [];
+    string editCode;
+
+    protected override void OnInitialized()
+    {
+        ReuseTabsService.UpdatePage(options =>
+        {
+            options.Title = b => b.AddContent(1, "库存单");
+            options.Order = Random.Shared.Next(0, 1000);
+            //options.Closable = !options.Closable;
+        });
+
+        List<M.InventoryItem> DbInvs = M.InventoryItem.Select();
+        //DbInvViews = new List<M.InventoryItemView>();
+        Data = M.InventoryItem.Select();
+        foreach (var inv in DbInvs)
+        {
+            DbInvViews.Add(inv.InventoryItemListByInventoryItem());
+        }
+    }
+
+    void Refresh()
+    {
+        //DbInvs.Add(new M.InventoryItem());
+        List<M.InventoryItem> DbInvs = M.InventoryItem.Select();
+        SqlClient SSC = new SqlClient();
+        DbInvs = SSC.Db.Queryable<M.InventoryItem>()
+            .IncludesAllFirstLayer()
+            .IncludesAllSecondLayer(xc => xc.Specifications)
+            .Where(x => x.Active == true).ToList();
+
+        DbInvViews = new List<M.InventoryItemView>();
+        foreach (var inv in DbInvs)
+        {
+            DbInvViews.Add(inv.InventoryItemListByInventoryItem());
+        }
+        Console.WriteLine(DbInvViews.Count());
+    }
+
+
+
+    void deleteRow(string id)
+    {
+        //listOfData = listOfData.Where(d => d.Id != id).ToArray();
+    }
+
+
+    void DeleteById(M.InventoryItemView invView)
+    {
+        invView.Delete();
+    }
+
+    void startEdit(string Code)
+    {
+    }
+
+    void stopEdit()
+    {
+    }
+}

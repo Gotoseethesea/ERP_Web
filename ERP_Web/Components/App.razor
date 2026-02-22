@@ -1,0 +1,34 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link href="_content/AntDesign/css/ant-design-blazor.css" rel="stylesheet"> <!-- 自动引入到这里 -->
+    <link href="_content/AntDesign.ProLayout/css/ant-design-pro-layout-blazor.css" rel="stylesheet" />
+    <link antblazor-css />
+    <link href="css/custom-antd.css" rel="stylesheet" /> <!-- 添加在AntDesign之后 -->
+
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["ERP_Web.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    @* <Routes @rendermode="InteractiveWebAssembly" /> *@
+    <script src="_content/AntDesign/js/ant-design-blazor.js"></script> <!-- 自动引入到这里 -->
+    <script src="_content/AntDesign.Charts/g2plot.min.js"></script>
+    <script src="_content/AntDesign.Charts/ant-design-charts-blazor.js"></script>
+    <script antblazor-js></script>
+
+    <script src="_framework/blazor.server.js"></script>
+
+</body>
+
+</html>

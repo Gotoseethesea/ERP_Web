@@ -1,0 +1,143 @@
+﻿@page "/dtemp"
+@using ERP_Web.Core.Service
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@using Microsoft.AspNetCore.Components.Authorization
+@using AntDesign
+@using System.Security.Claims
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+
+<Button Type="@ButtonType.Primary" OnClick="Check">测试按钮权限</Button>
+
+@if (Buttons != null && Buttons.Any())
+{
+    <div class="button-container" style="margin-top: 20px;">
+        @foreach (var button in Buttons)
+        {
+            <Button Type="@GetButtonType(button.ButtonType)"
+                    Icon="@button.IconType"
+                    OnClick="() => HandleButtonClick(button.ActionName)"
+                    Style="margin-right: 10px;">
+                @button.DisplayText
+            </Button>
+        }
+    </div>
+}
+else if (Buttons != null)
+{
+    <div style="margin-top: 20px; color: #f5222d;">
+        <Icon Type="warning" Theme="IconThemeType.Outline" /> 当前用户没有此页面的按钮权限
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div style="margin-top: 20px; color: #f5222d;">
+        <Icon Type="close-circle" Theme="IconThemeType.Outline" /> @ErrorMessage
+    </div>
+}
+
+@code {
+    SqlClient SSC = new();
+    public string PageRoute { get; set; } = "PrView";
+    public List<SysButton> Buttons { get; set; }
+    public string ErrorMessage { get; set; }
+    
+    private User _currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // 获取当前认证状态
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            
+            // 检查用户是否认证
+            if (!user.Identity.IsAuthenticated)
+            {
+                ErrorMessage = "用户未登录，请先登录系统";
+                return;
+            }
+            
+            // 获取用户ID声明
+            var userIdClaim = user.FindFirst("Account");
+            if (userIdClaim == null)
+            {
+                ErrorMessage = "用户认证信息不完整，缺少用户账户";
+                return;
+            }
+            
+            // 解析用户账户
+            var Account = userIdClaim.Value;
+            if (string.IsNullOrEmpty(Account))
+            {
+                ErrorMessage = "用户账户格式不正确";
+                return;
+            }
+            
+            // 从数据库获取用户
+            _currentUser = SSC.Db.Queryable<User>().First(u => u.Account == Account);
+            if (_currentUser == null)
+            {
+                ErrorMessage = "用户不存在或已被删除";
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"初始化失败: {ex.Message}";
+            Console.WriteLine($"初始化错误: {ex.Message}\n{ex.StackTrace}");
+        }
+    }
+
+    public async Task Check()
+    {
+        try
+        {
+            Buttons = null;
+            ErrorMessage = null;
+            
+            if (_currentUser == null)
+            {
+                ErrorMessage = "无法检查权限，用户信息未加载";
+                return;
+            }
+            
+            // 获取授权按钮
+            Buttons = PermissionService.GetAuthorizedButtons(_currentUser, PageRoute);
+            
+            if (Buttons == null || !Buttons.Any())
+            {
+                Console.WriteLine("当前用户没有此页面的按钮权限");
+            }
+            else
+            {
+                Console.WriteLine($"加载了 {Buttons.Count} 个授权按钮");
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"权限检查失败: {ex.Message}";
+            Console.WriteLine($"权限检查错误: {ex.Message}\n{ex.StackTrace}");
+        }
+    }
+    
+    // 处理按钮点击事件
+    private async Task HandleButtonClick(string actionName)
+    {
+        Console.WriteLine($"按钮被点击: {actionName}");
+        
+        // 在实际应用中，这里可以分发给实际页面处理
+        // 例如: await OnButtonClick.InvokeAsync(actionName);
+    }
+    
+    private ButtonType GetButtonType(string buttonTypeStr)
+    {
+        return Enum.TryParse<ButtonType>(buttonTypeStr, true, out var buttonType)
+            ? buttonType
+            : ButtonType.Primary;
+    }
+}

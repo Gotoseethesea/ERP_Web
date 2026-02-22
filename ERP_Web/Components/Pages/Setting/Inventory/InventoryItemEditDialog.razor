@@ -1,0 +1,137 @@
+﻿@using AntDesign
+@using ERP_Web.Models
+@using ERP_Web.Core.Service
+@inject MessageService MessageService
+
+
+<Modal @ref="modal" 
+       Title="@(currentItem.Code == null ? "添加商品" : "编辑商品")"
+       Width="800"
+       OnOk="HandleOk"
+       OnCancel="Close"
+       ConfirmLoading="@saving">
+    <Form Model="@currentItem" LabelColSpan="6" WrapperColSpan="18">
+        <Row Gutter="16">
+            <Col Span="12">
+                <FormItem Label="商品编码" Required>
+                    <Input @bind-Value="@currentItem.Code" Disabled="@(currentItem.Code != null)" />
+                </FormItem>
+            </Col>
+            <Col Span="12">
+                <FormItem Label="商品名称" Required>
+                    <Input @bind-Value="@currentItem.Name" />
+                </FormItem>
+            </Col>
+        </Row>
+        
+        <Row Gutter="16">
+            <Col Span="12">
+                <FormItem Label="分类">
+                    <SimpleSelect @bind-Value=@currentItem.CategoryCode Style="width: 200px;">
+                        <SelectOptions>
+                            @foreach (Category item in categories)
+                            {
+                                <SimpleSelectOption Value="@item.Code" Label="@(item.Code + "." + item.Name)"></SimpleSelectOption>
+                            }
+                        </SelectOptions>
+                    </SimpleSelect>
+                </FormItem>
+            </Col>
+            <Col Span="12">
+                <FormItem Label="库存计价方法">
+                    <SimpleSelect @bind-Value=@currentItem.CostingMethodCode Style="width: 200px;">
+                        <SelectOptions>
+                            @foreach (var item in inventoryCostingMethods)
+                            {
+                                <SimpleSelectOption Value="@item.Code" Label="@(item.Code + "." + item.Name)"></SimpleSelectOption>
+                            }
+                        </SelectOptions>
+                    </SimpleSelect>
+                </FormItem>
+            </Col>
+        </Row>
+        
+        <Row Gutter="16">
+            <Col Span="24">
+                <FormItem Label="备注">
+                    <TextArea @bind-Value="@currentItem.Note" Rows="3" />
+                </FormItem>
+            </Col>
+        </Row>
+        
+        <Row Gutter="16">
+            <Col Span="12">
+                <FormItem Label="状态">
+                    <Switch @bind-Value="@currentItem.Active" 
+                            CheckedChildren="启用" UnCheckedChildren="停用" />
+                </FormItem>
+            </Col>
+        </Row>
+    </Form>
+</Modal>
+
+@code {
+    private Modal modal;
+    private InventoryItem currentItem = new InventoryItem();
+    private List<Category> categories = Category.Select();
+    private List<InventoryCostingMethod> inventoryCostingMethods = InventoryCostingMethod.Select();
+    private bool saving;
+    private bool visible;
+
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+
+    public void Show(InventoryItem item)
+    {
+        currentItem = item ?? new InventoryItem();
+        visible = true;
+        //modal.Visible = true;
+    }
+
+    public void Close()
+    {
+        visible = false;
+        //modal.visible = false;
+    }
+
+    private async Task HandleOk()
+    {
+        saving = true;
+        StateHasChanged();
+        
+        try
+        {
+            // 验证表单
+            if (string.IsNullOrEmpty(currentItem.Code) || string.IsNullOrEmpty(currentItem.Name))
+            {
+                MessageService.Error("商品编码和名称不能为空！");
+                return;
+            }
+
+            // 保存逻辑
+            if (currentItem.Id == 0)
+            {
+                // 添加
+                currentItem.Insert();
+            }
+            else
+            {
+                // 更新
+                currentItem.Update();
+            }
+
+            // 触发保存事件
+            await OnSave.InvokeAsync(null);
+            Close();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"保存失败: {ex.Message}");
+        }
+        finally
+        {
+            saving = false;
+            StateHasChanged();
+        }
+    }
+}

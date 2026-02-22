@@ -1,0 +1,12 @@
+﻿@layout EmptyLayout
+@using Components.Layout
+
+@inject NavigationManager NavigationManager
+
+@code {
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        NavigationManager.NavigateTo("/login", true);
+    }
+}

@@ -1,0 +1,198 @@
+﻿@using AntDesign
+@using ERP_Web.Models
+@using ERP_Web.Models.PrivilegeHub
+
+<!-- 外层改为Collapse折叠组件，支持展开收起 -->
+<Collapse Style="margin-top: 10px;"
+          DefaultActiveKey="@(DefaultCollapsed ? Array.Empty<string>() : new [] {"timeline-panel"})"
+          Bordered > 
+    <Panel Key="timeline-panel">
+        <HeaderTemplate>
+            单据审批流程
+        </HeaderTemplate>
+        <ChildContent>
+            <GridRow gutter="24">
+                <GridCol Span="12">
+                    <Timeline Mode="TimelineMode.Left">
+                        <!-- 1. 单据创建节点 -->
+                        <TimelineItem Label="@Pr.InsertTime.ToString("yyyy-MM-dd HH:mm")" Color="TimelineDotColor.Blue">
+                            <div class="timeline-header">
+                                <span class="operation-type">单据创建</span>
+                                <span class="operation-time">@Pr.InsertTime.ToString("yyyy-MM-dd HH:mm")</span>
+                            </div>
+                            <p class="operation-user">操作人：@Pr.InsertUser</p>
+                        </TimelineItem>
+
+@*                         <!-- 2. 提交节点 -->
+                        @if (Pr.Status is not DocumentStatus.Draft)
+                        {
+                            <TimelineItem Label="@Pr.UpdateTime?.ToString("yyyy-MM-dd HH:mm")" Color="TimelineDotColor.Red">
+                                <div class="timeline-header">
+                                    <span class="operation-type">提交审批</span>
+                                    <span class="operation-time">@Pr.UpdateTime?.ToString("yyyy-MM-dd HH:mm")</span>
+                                </div>
+                                <p class="operation-user">提交人：@Pr.InsertUser</p>
+                            </TimelineItem>
+                        } *@
+
+                        <!-- 3. 审批流程节点 -->
+                        @if (Pr.ApprovalProcess?.Steps != null && Pr.ApprovalProcess.Steps.Any())
+                        {
+                            foreach (var step in Pr.ApprovalProcess.Steps.OrderBy(s => s.StepNumber))
+                            {
+                                var (color, statusText) = GetStepStatusInfo(step.Status);
+                                <TimelineItem Label="@step.ApprovalTime?.ToString("yyyy-MM-dd HH:mm")" Color="@color">
+                                    <div class="timeline-header">
+                                        <span class="operation-type">@step.Role @statusText</span>
+                                        @if (step.ApprovalTime >= DateTime.Now.AddYears(-5))
+                                        {
+                                            <span class="operation-time">@step.ApprovalTime?.ToString("yyyy-MM-dd HH:mm")</span>
+                                        }
+                                    </div>
+                                    @if (step.Approver != null)
+                                    {
+                                        <p class="operation-user">操作人：@step.Approver.Name</p>
+                                    }
+                                    @if (!string.IsNullOrEmpty(step.Comments))
+                                    {
+                                        <p class="operation-remark">备注：@step.Comments</p>
+                                    }
+                                    @if (step.Status == ApprovalStatus.Pending)
+                                    {
+                                        <Tag Color="TagColor.Blue">待 @step.Approver?.Name 审批</Tag>
+                                    }
+                                </TimelineItem>
+                            }
+                        }
+                        @*             <!-- 4. 撤回节点（如果有撤回记录） -->
+            @if (!string.IsNullOrEmpty(Pr.WithdrawUser) && Pr.WithdrawTime.HasValue)
+            {
+                <TimelineItem Color="orange">
+                    <div class="timeline-header">
+                        <span class="operation-type">撤回单据</span>
+                        <span class="operation-time">@Pr.WithdrawTime.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                    </div>
+                    <p class="operation-user">操作人：@Pr.WithdrawUser</p>
+                    @if (!string.IsNullOrEmpty(Pr.WithdrawRemark))
+                    {
+                        <p class="operation-remark">撤回备注：@Pr.WithdrawRemark</p>
+                    }
+                </TimelineItem>
+            } *@
+                        <!-- 5. 最终完成状态节点 -->
+                        @if (Pr.Status is DocumentStatus.Approved or DocumentStatus.Completed or DocumentStatus.Posted)
+                        {
+                            <TimelineItem Color="TimelineDotColor.Blue">
+                                <div class="timeline-header">
+                                    <span class="operation-type">审批完成</span>
+                                </div>
+                                <p>单据已通过全部审批，当前状态：@Pr.GetStatusDisplayName()</p>
+                            </TimelineItem>
+                        }
+                        @if (Pr.Status is DocumentStatus.Rejected or DocumentStatus.Voided or DocumentStatus.Cancelled)
+                        {
+                            <TimelineItem Color="TimelineDotColor.Blue">
+                                <div class="timeline-header">
+                                    <span class="operation-type">流程终止</span>
+                                </div>
+                                <p>单据状态：@Pr.GetStatusDisplayName()</p>
+                            </TimelineItem>
+                        }
+                        <!-- 6. 待审批提示 -->
+                        @if (Pr.Status is DocumentStatus.Submitted or DocumentStatus.Auditing && Pr.ApprovalProcess != null)
+                        {
+                            var currentStep = Pr.ApprovalProcess.Steps.FirstOrDefault(s => s.Status == ApprovalStatus.Pending);
+                            if (currentStep != null)
+                            {
+                                <TimelineItem Color="TimelineDotColor.Blue" Dot="@_pendingDotTemplate">
+                                    <div class="timeline-header">
+                                        <span class="operation-type">等待审批</span>
+                                    </div>
+                                    <p>当前待 @currentStep.Role @(currentStep.Approver != null ? $"（{currentStep.Approver.Name}）" : "")审批</p>
+                                </TimelineItem>
+                            }
+                        }
+                    </Timeline>
+
+                </GridCol>
+            </GridRow>
+        </ChildContent>
+    <!-- 原来的Timeline内容保持不变 -->
+    </Panel>
+</Collapse>
+
+<style>
+    .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+
+    .operation-type {
+        font-weight: 500;
+        font-size: 14px;
+    }
+
+    .operation-time {
+        color: #8c8c8c;
+        font-size: 12px;
+    }
+
+    .operation-user {
+        margin: 2px 0;
+        color: #595959;
+        font-size: 13px;
+    }
+
+    .operation-remark {
+        margin: 2px 0;
+        color: #262626;
+        font-size: 13px;
+        background: #f5f5f5;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+</style>
+
+@code {
+    [Parameter] required public PurchaseRequisition Pr { get; set; }
+    /// <summary>
+    /// 配置默认是否折叠，默认false=默认展开
+    /// </summary>
+    [Parameter] public bool DefaultCollapsed { get; set; } = false;
+
+    // 待审批节点Dot模板
+    private readonly RenderFragment _pendingDotTemplate = @<Template>
+        <Icon Type="@IconType.Outline.ClockCircle" Theme="IconThemeType.Fill" Style="font-size: 16px;" />
+    </Template>;
+
+    /// <summary>
+    /// 根据审批状态获取对应颜色和文本
+    /// </summary>
+    private (TimelineDotColor Color, string StatusText) GetStepStatusInfo(ApprovalStatus status)
+    {
+        return status switch
+        {
+            ApprovalStatus.Approved => (TimelineDotColor.Green, "审批通过"),
+            ApprovalStatus.Rejected => (TimelineDotColor.Red, "审批拒绝"),
+            ApprovalStatus.Returned => (TimelineDotColor.Gray, "已退回"),
+            _ => (TimelineDotColor.Gray, "待审批")
+        };
+    }
+
+    /// <summary>
+    /// 获取头部状态标签颜色
+    /// </summary>
+    private string GetStatusTagColor(DocumentStatus? status)
+    {
+        return status switch
+        {
+            DocumentStatus.Draft => "TagColor.Gray",
+            DocumentStatus.Submitted or DocumentStatus.Auditing => "TagColor.Blue",
+            DocumentStatus.Approved or DocumentStatus.Completed or DocumentStatus.Posted => "TagColor.Green",
+            DocumentStatus.Rejected or DocumentStatus.Cancelled or DocumentStatus.Voided => "TagColor.Red",
+            _ => "TagColor.Gray"
+        };
+    }
+}

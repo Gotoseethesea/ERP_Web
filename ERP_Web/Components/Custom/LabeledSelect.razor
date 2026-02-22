@@ -1,0 +1,20 @@
+﻿<!-- LabeledSelect.razor -->
+<div class="labeled-select">
+    <label>@LabelText</label>
+    <Select @attributes="AdditionalAttributes" 
+        TItemValue="string"
+        TItem="string">
+        @ChildContent
+    </Select>
+</div>
+
+@code {
+    [Parameter]
+    public string LabelText { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

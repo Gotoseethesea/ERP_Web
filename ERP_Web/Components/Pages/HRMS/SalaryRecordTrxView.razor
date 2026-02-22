@@ -1,0 +1,184 @@
+﻿@page "/hr/salary/record"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AntDesign.TableModels
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+
+<h3>工资条</h3>
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="年度">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择年度"
+                        @bind-Value="@YearFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    @for (int i = DateTime.Now.Year - 2; i <= DateTime.Now.Year; i++)
+                    {
+                        <SelectOption TItemValue="int?" TItem="int?" Value="i" Label="@(i+"年")" />
+                    }
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="月份">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择月份"
+                        @bind-Value="@MonthFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    @for (int i = 1; i <= 12; i++)
+                    {
+                        <SelectOption TItemValue="int?" TItem="int?" Value="i" Label="@(i+"月")" />
+                    }
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="发放状态">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择状态"
+                        @bind-Value="@StatusFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    <SelectOption TItemValue="int?" TItem="int?" Value="0" Label="未发放" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="1" Label="已发放" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="员工姓名">
+                <Input @bind-Value="@Keyword" Placeholder="请输入员工姓名" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" HtmlType="button">
+                搜索
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<Table DataSource="@data" TItem="SalaryRecord" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+       Resizable
+       HidePagination Bordered
+       ScrollX="2000" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => c.Year" Title="年度" Width="80" Fixed="ColumnFixPlacement.Left">
+        @row.Year 年
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Month" Title="月份" Width="80" Fixed="ColumnFixPlacement.Left">
+        @row.Month 月
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Employee.Name"  Title="员工姓名" Width="100">
+        @row.Employee?.Name ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Employee.Code" Title="工号" Width="100">
+        @row.Employee?.Code ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Employee.Department.Name" Title="部门" Width="120">
+        @row.Employee?.Department?.Name ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.BaseSalary" Title="基本工资" Width="120" Align="ColumnAlign.Right">
+        @row.BaseSalary.ToString("C0")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.PerformanceSalary" Title="绩效工资" Width="120" Align="ColumnAlign.Right">
+        @row.PerformanceSalary.ToString("C0")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.TotalSalary" Title="应发工资" Width="120" Align="ColumnAlign.Right">
+        @row.TotalSalary.ToString("C0")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Tax" Title="个税" Width="100" Align="ColumnAlign.Right">
+        @row.Tax.ToString("C0")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.SocialSecurityPersonal" Title="社保个人" Width="100" Align="ColumnAlign.Right">
+        @row.SocialSecurityPersonal.ToString("C0")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.ActualSalary" Title="实发工资" Width="120" Align="ColumnAlign.Right">
+        <Text Strong>@row.ActualSalary.ToString("C0")</Text>
+    </PropertyColumn>
+    <ActionColumn Title="发放状态" Width="100">
+        <Tag Color="@(row.PayStatus == 1 ? "green" : "orange")">
+            @row.GetPayStatusDisplayName()
+        </Tag>
+    </ActionColumn>
+
+    <ActionColumn Title="操作" Width="150" Fixed="ColumnFixPlacement.Right">
+        <Space Size="SpaceSize.Small">
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">查看详情</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">导出</Button>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    int? YearFilter = DateTime.Now.Year;
+    int? MonthFilter = DateTime.Now.Month;
+    int? StatusFilter;
+    string Keyword;
+    SalaryRecord FilterModel = new SalaryRecord();
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    List<SalaryRecord> data = new List<SalaryRecord>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    public async Task Refresh()
+    {
+        try
+        {
+            SqlClient SSC = new SqlClient();
+            var query = SSC.Db.Queryable<SalaryRecord>()
+                .Includes(s => s.Employee, e => e.Department)
+                .Where(s => s.Active);
+
+            // 年度筛选
+            if (YearFilter.HasValue)
+            {
+                query = query.Where(s => s.Year == YearFilter.Value);
+            }
+
+            // 月份筛选
+            if (MonthFilter.HasValue)
+            {
+                query = query.Where(s => s.Month == MonthFilter.Value);
+            }
+
+            // 状态筛选
+            if (StatusFilter.HasValue)
+            {
+                query = query.Where(s => s.PayStatus == StatusFilter.Value);
+            }
+
+            // 姓名筛选
+            if (!string.IsNullOrEmpty(Keyword))
+            {
+                query = query.Where(s => s.Employee.Name.Contains(Keyword));
+            }
+
+            data = await query.OrderByDescending(s => s.Year).OrderByDescending(s => s.Month).ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询工资条失败：{ex.Message}");
+            data = new List<SalaryRecord>();
+        }
+    }
+}

@@ -1,0 +1,181 @@
+﻿@page "/hr/employee"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AntDesign.TableModels
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+@using Core.Extensions
+
+<h3>员工档案</h3>
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="部门">
+                <Select Mode="SelectMode.Multiple"
+                        Placeholder="请选择部门"
+                        @bind-Values="@DeptSelected"
+                        TItemValue="string"
+                        TItem="string"
+                        EnableSearch
+                        AllowClear>
+                    <SelectOptions>
+                        @foreach (var item in Deptlist)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value=@item.Code Label=@item.Name />
+                        }
+                    </SelectOptions>
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="员工状态">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择状态"
+                        @bind-Value="@StatusFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    <SelectOption TItemValue="int?" TItem="int?" Value="-1" Label="全部" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="0" Label="试用" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="1" Label="正式" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="2" Label="离职" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="入职日期">
+                <RangePicker TValue="DateOnly?[]" Format="yyyy-MM-dd" @bind-Value="DateOnlys" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="关键字">
+                <Input @bind-Value="@Keyword" Placeholder="姓名/工号/手机号" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" HtmlType="button">
+                搜索
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<Table DataSource="@data" TItem="Employee" HidePagination="false" PageSize="20">
+    <PropertyColumn Property="c => c.Code" Title="工号" Width="100" />
+    <PropertyColumn Property="c => c.Name" Title="姓名" Width="100" />
+    <PropertyColumn Property="c => c.Department.Name" Title="部门" Width="150" />
+    <PropertyColumn Property="c => c.HireDate" Title="入职日期" Width="120" />
+    <PropertyColumn Property="c => c.Status" Title="状态" Width="100">
+    </PropertyColumn>
+    <ActionColumn Title="操作" Width="200">
+        <Button Size="ButtonSize.Small" >查看</Button>
+        <Button Size="ButtonSize.Small" Style="margin-left:4px">编辑</Button>
+        <Button Size="ButtonSize.Small"Type="ButtonType.Dashed" Style="margin-left:4px">发起异动</Button>
+    </ActionColumn>
+</Table>
+
+<Table DataSource="@data" TItem="Employee" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+       Resizable
+       HidePagination="false"
+       Bordered
+       PageSize="20"
+       ScrollX="1800" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => c.Code" Title="工号" Width="100" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.Name" Title="姓名" Width="100" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c=>c.Department.Name" Title="部门" Width="120">
+        @row.Department.Name
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Phone" Title="手机号" Width="120" />
+    <PropertyColumn Property="c => c.Email" Title="邮箱" Width="180" />
+    <PropertyColumn Property="c => c.HireDate" Title="入职日期" Width="120">
+        @row.HireDate.ToString("yyyy-MM-dd")
+    </PropertyColumn>
+    <PropertyColumn Property="c=>c.Status" Title="状态" Width="100">
+        <Tag Color="@(row.Status == 1 ? "green" : row.Status == 0 ? "orange" : "red")">
+            @row.Status
+        </Tag>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InsertTime" Title="创建时间" Width="160" />
+
+    <ActionColumn Title="操作" Width="180" Fixed="ColumnFixPlacement.Right">
+        <Space Size="SpaceSize.Small">
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">编辑</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">异动</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small" Danger>删除</Button>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    List<Department> Deptlist = Department.Select();
+    IEnumerable<string> DeptSelected;
+    DateOnly?[] DateOnlys = new DateOnly?[2];
+    int? StatusFilter;
+    string Keyword;
+    Employee FilterModel = new Employee();
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    List<Employee> data = new List<Employee>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    public async Task Refresh()
+    {
+        try
+        {
+            SqlClient SSC = new SqlClient();
+            var query = SSC.Db.Queryable<Employee>()
+                .Includes(e => e.Department)
+                .Where(e => e.Active);
+
+            //部门筛选
+            if (DeptSelected != null && DeptSelected.Any())
+            {
+                var deptIds = Deptlist.Where(d => DeptSelected.Contains(d.Code)).Select(d => d.Code).ToList();
+                query = query.Where(e => deptIds.Contains(e.DepartmentCode));
+            }
+
+            // 状态筛选
+            // if (StatusFilter.HasValue)
+            // {
+            //     query = query.Where(e => e.Status == StatusFilter.Value);
+            // }
+
+            // 日期筛选
+            // if (DateOnlys[0].HasValue)
+            // {
+            //     query = query.Where(e => e.HireDate >= DateOnlys[0].Value.ToDateTime(TimeOnly.MinValue));
+            // }
+            // if (DateOnlys[1].HasValue)
+            // {
+            //     query = query.Where(e => e.HireDate <= DateOnlys[1].Value.ToDateTime(TimeOnly.MaxValue));
+            // }
+
+            //关键字筛选
+            if (!string.IsNullOrEmpty(Keyword))
+            {
+                query = query.Where(e => e.Name.Contains(Keyword) || e.Code.Contains(Keyword) || e.Phone.Contains(Keyword));
+            }
+
+            data = query.OrderByDescending(e => e.DepartmentCode).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询员工档案失败：{ex.Message}");
+            data = new List<Employee>();
+        }
+    }
+}

@@ -1,0 +1,161 @@
+﻿@* ================ 职员管理页面 (EmployeeManagement.razor) ================ *@
+@page "/employee-management"
+@using ERP_Web.Models
+@using AntDesign
+@using ERP_Web.Repository
+@using NPinyin
+@inject MessageService MessageService
+
+<PageHeader Title="职员管理" SubTitle="管理系统中的职员信息">
+    <ButtonGroup>
+        <Button Type="ButtonType.Primary" Icon="plus" OnClick="ShowAddModal">新增职员</Button>
+    </ButtonGroup>
+</PageHeader>
+
+<Card>
+    <Table DataSource="@employees" TItem="Employee" Context="row" Bordered="true" Size="TableSize.Small">
+        <PropertyColumn Title="代码" Property="c => c.Code" />
+        <PropertyColumn Title="姓名" Property="c => c.Name" />
+        <PropertyColumn Title="部门" Property="c => c.DepartmentCode" />
+        <ActionColumn Title="操作" Width="200px">
+            <Template>
+                @{
+                    var employee = (Employee)row;
+                    <Space>
+                        <Button Type="ButtonType.Link" Size="ButtonSize.Small" Icon="edit" 
+                                OnClick="() => ShowEditModal(employee)">编辑</Button>
+                        <Button Type="ButtonType.Link" Size="ButtonSize.Small" Danger Icon="delete" 
+                                OnClick="() => DeleteEmployee(employee)">删除</Button>
+                    </Space>
+                }
+            </Template>
+        </ActionColumn>
+    </Table>
+</Card>
+
+<Modal Title="@(isEditing ? "编辑职员" : "新增职员")"
+       Visible="@modalVisible"
+       OnCancel="CloseModal"
+       OnOk="SaveEmployee">
+    <Form Model="@currentEmployee">
+        <FormItem Label="职员姓名" Required>
+            <Input @bind-Value="@currentEmployee.Name" />
+        </FormItem>
+        <FormItem Label="职员代码">
+            <Input @bind-Value="@currentEmployee.Code" ReadOnly />
+        </FormItem>
+        <FormItem Label="部门">
+            <Select TItem="Department"
+                    TItemValue="Department"
+                    DataSource="@departments"
+                    @bind-Value="@currentEmployee.Department"
+                    @bind-SelectedItem="@currentEmployee.Department"
+                    LabelName="@nameof(Department.Name)"
+                    SortByLabel="@SortDirection.Ascending"
+                    SortByGroup="@SortDirection.Ascending"
+                    OnSelectedItemChanged="DeptChange">
+            </Select>
+        </FormItem>
+        <FormItem Label="备注">
+            <Input @bind-Value="@currentEmployee.Note" />
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    private List<Employee> employees = new();
+    private List<Department> departments = new();
+    private Employee currentEmployee = new();
+    private bool modalVisible = false;
+    private bool isEditing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        departments = Department.Select();
+    }
+
+    private async Task LoadData()
+    {
+        employees = await Employee.Select();
+    }
+
+    private void ShowAddModal()
+    {
+        currentEmployee = new Employee();
+        isEditing = false;
+        modalVisible = true;
+    }
+
+    private void ShowEditModal(Employee employee)
+    {
+        currentEmployee = employee;
+        isEditing = true;
+        modalVisible = true;
+    }
+
+    private void CloseModal() => modalVisible = false;
+
+    private void OnNameChange(ChangeEventArgs e)
+    {
+        if (!isEditing && !string.IsNullOrWhiteSpace(currentEmployee.Name))
+        {
+            currentEmployee.Code = GenerateEmployeeCode(currentEmployee.Name);
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveEmployee()
+    {
+        if (string.IsNullOrWhiteSpace(currentEmployee.Name))
+        {
+            MessageService.Error("职员姓名不能为空");
+            return;
+        }
+
+        try
+        {
+            SqlClient sqlClient = new SqlClient();
+            if (isEditing)
+            {
+                await sqlClient.Db.Updateable(currentEmployee).ExecuteCommandAsync();
+                MessageService.Success("职员信息更新成功");
+            }
+            else
+            {
+                await sqlClient.Db.Insertable(currentEmployee).ExecuteCommandAsync();
+                MessageService.Success("职员添加成功");
+            }
+            
+            await LoadData();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"操作失败: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteEmployee(Employee employee)
+    {
+
+        SqlClient sqlClient = new SqlClient();
+
+        employee.Active = false;
+        sqlClient.Db.Updateable(employee).ExecuteCommandAsync();
+        MessageService.Success("职员已标记为无效");
+        await LoadData();
+
+    }
+    void DeptChange(Department value)
+    {
+        currentEmployee.DepartmentCode = value?.Code;
+        Console.WriteLine($"selected: {value?.Name}");
+    }
+    // 生成职员代码（拼音首字母）
+    private string GenerateEmployeeCode(string name)
+    {
+        // 使用拼音库生成首字母
+        return Pinyin.GetInitials(name);
+    }
+}

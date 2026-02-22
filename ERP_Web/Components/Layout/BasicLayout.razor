@@ -1,0 +1,488 @@
+﻿@* 把原来的@rendermode InteractiveServer改成下面的 @rendermode InteractiveServer
+*@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AntDesign
+@using AntDesign.ProLayout
+@using ERP_Web.Core.Constants
+@using ERP_Web.Core.Login
+@using ERP_Web.Core.Service
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@using ERP_Web.Client
+@using System.Text.Json
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject CookieEnabledClientFactory CookieClientFactory
+@inject IJSRuntime JS
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+
+<AntDesign.ProLayout.BasicLayout 
+    Logo="@("https://gw.alipayobjects.com/zos/rmsportal/KDpgvguMpGfqaHPjicRK.svg")"
+    MenuData="_menuData"
+    NavTheme="AntDesign.MenuTheme.Dark"
+    Theme="AntDesign.MenuTheme.Dark"
+    Title = "ERP_Web"
+    MenuAccordion
+    @bind-Collapsed="collapsed">
+    <HeaderContentRender>
+        <Space Size="@("24")">
+            <SpaceItem>
+                <Icon Class="action" Type="@(collapsed ? "menu-unfold" : "menu-fold")" OnClick="Toggle" />
+            </SpaceItem>
+            <SpaceItem>
+                <Icon Class="action" Type="reload" Theme="IconThemeType.Outline" OnClick="Reload" />
+            </SpaceItem>
+            <!-- ✅ 新增：当前模块显示+切换按钮 -->
+            <SpaceItem>
+                <Button Type="ButtonType.Link" Size="ButtonSize.Large" OnClick="SwitchModule">
+                    <Icon Type="@_currentModuleIcon" Style="margin-right:4px" />
+                    @_moduleNameMap.GetValueOrDefault(_currentModule, "选择模块")
+                </Button>
+            </SpaceItem>
+            <SpaceItem>
+                <Button Type="ButtonType.Link" Size="ButtonSize.Large">星陨阁</Button>
+            </SpaceItem>
+        </Space>
+    </HeaderContentRender>
+    <RightContentRender >
+        <RightContent/>
+    </RightContentRender>
+    <ChildContent>
+        <ReuseTabs ></ReuseTabs>
+       @if (_isLoaded)
+        {
+            @Body
+        }
+        else
+        {
+            <Spin Tip="首次加载中..." Size="SpinSize.Small"></Spin> <!-- Ant Design 加载动画 -->
+        }
+   </ChildContent>
+    <FooterRender>
+        <FooterView Copyright="2026 ERP管理系统 | 版本 V1.0" Links="Links"></FooterView>
+    </FooterRender>
+</AntDesign.ProLayout.BasicLayout>
+
+<SettingDrawer @rendermode="InteractiveServer"/>
+@code{
+    // 新增：当前选中模块，默认空
+    private string _currentModule = string.Empty;
+    private string _currentModuleIcon = string.Empty;
+
+    // 新增：模块显示名称映射
+    private readonly Dictionary<string, string> _moduleNameMap = new()
+    {
+        {"PSI", "进销存管理"},
+        {"SMS", "销售系统"},
+        {"HR", "人事管理"},
+        {"EAM", "资产管理"},
+        {"FMS", "财务管理"},
+        {"EMS", "工程能耗"}
+    };
+    // 其他原有变量（collapsed、_isLoaded、_menuData等）保持不变
+}
+@code{
+
+    bool collapsed;
+    private bool _isLoaded = false;
+
+    private MenuDataItem[] _menuData;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SnowFlakeSingle.WorkId = 24;//唯一数字;
+
+        // ✅ 新增：从localStorage读取当前选中模块，没选就跳转到模块选择页
+        //await JSRuntime.InvokeVoidAsync("localStorage.setItem", "currentModule", module);
+
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+
+        if (firstRender)
+        {
+            SqlClient SSC = new SqlClient();
+
+            _currentModule = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "currentModule") ?? string.Empty;
+            _currentModuleIcon = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "currentModuleIcon") ?? string.Empty;
+
+            if (string.IsNullOrEmpty(_currentModule))
+            {
+                NavigationManager.NavigateTo("/module-selector");
+                await Task.Delay(100); // 确保资源加载
+                _isLoaded = true;
+                StateHasChanged();
+                return;
+            }
+
+            _menuData = new[] {
+                new MenuDataItem
+                {
+                    // authority = "admin",
+                    Path = "/",
+                    Name = "Home",
+                    Key = "home",
+                    Icon = "home",
+                },
+                new MenuDataItem
+                {
+                    Path = "/icadd",
+                    Name = "库存",
+                    Key = "IcAdd",
+                    Icon = "menu-unfold",
+                    Children = [
+                        new MenuDataItem{
+                            Path = "/icadd",
+                            Name = "库存收发",
+                            Key = "icadd.icadd",
+                            Icon = "plus-square"
+                        },
+                        new MenuDataItem{
+                            Path = "/inventory_records",
+                            Name = "库存记录",
+                            Key = "inventory_records",
+                            Icon = "unordered-list"
+                        },
+                        new MenuDataItem{
+                            Path = "/inventory-balance",
+                            Name = "库存结余",
+                            Key = "inventory-balance",
+                            Icon = "menu-unfold"
+                        },
+                        new MenuDataItem{
+                            Path = "/inventory-stocktake",
+                            Name = "库存盘点",
+                            Key = "inventory-stocktake",
+                            Icon = "menu-unfold",
+                            HideChildrenInMenu = true
+                        }
+                    ]
+                },
+                new MenuDataItem
+                {
+                    Path = "/counter",
+                    Name = "Counter",
+                    Key = "counter",
+                    Icon = "menu-unfold",
+                },
+                new MenuDataItem
+                {
+                    Path = "/initialize",
+                    Name = "设置",
+                    Key = "setting",
+                    Icon = "setting",
+                    Children = [
+                        new MenuDataItem{
+
+                            Path = "/initialize",
+                            Name = "初始化",
+                            Key = "initialize",
+                            Icon = "setting"
+                        },
+                        new MenuDataItem{
+
+                            Path = "/category",
+                            Name = "存货分类",
+                            Key = "category",
+                            Icon = "folder"
+                        },
+                        new MenuDataItem{
+                            Path = "/inventoryitem",
+                            Name = "存货档案",
+                            Key = "inventoryitem",
+                            Icon = "folder"
+                        },
+                        new MenuDataItem{
+                            Path = "/warehouse",
+                            Name = "仓库档案",
+                            Key = "warehouse",
+                            Icon = "folder"
+                        }
+                    ]
+                }
+            };
+
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            ClaimsPrincipal authuser = authState.User;
+            string userName = authuser.Identity?.Name; // 用户名
+            string Account = authuser.FindFirst("Account")?.Value; // 自定义声明（如工号）
+            bool isAdmin = authuser.IsInRole("Admin"); // 角色检查
+
+            User user = User.SelectByAccount(Account);
+
+            List<AppMenu> menuTree;
+
+            if (user == null)
+            {
+                // 用户未登录，显示登录菜单
+                _menuData = new[] {
+                new MenuDataItem
+                {
+                    Path = "/login",
+                    Name = "登录",
+                    Key = "login",
+                    Icon = "login",
+                }
+            };
+                _isLoaded = true;
+                return;
+            }
+
+            PermissionService permissionService = new PermissionService();
+            // 2. 获取用户权限
+            HashSet<string> userPermissions = permissionService.GetUserPermissions(user);
+
+            // ✅ 修改：加载全量菜单后按当前模块过滤
+            menuTree = SSC.Db.Queryable<AppMenu>()
+                .Where(m => m.Active && m.Code != "Login1st")
+                .OrderBy(m => m.Sequence)
+                .ToTree(it => it.Children, it => it.ParentId, 0, it => it.Id)
+                .ToList();
+
+            // 3. 动态构建菜单树
+            //BuildMenuTree(userPermissions);
+            if (userPermissions.Count() >= 0)
+            {
+                menuTree = SSC.Db.Queryable<AppMenu>()
+                    .Where(m => m.Active && m.Code != "Login1st") // 不显示登录
+                    .OrderBy(m => m.Sequence) // 按顺序排序
+                    .ToTree(it => it.Children, it => it.ParentId, 0, it => it.Id)
+                    .ToList();
+
+                menuTree = SSC.Db.Queryable<AppMenu>()
+                    .Where(m => m.Active) // 不显示登录
+                    .OrderBy(m => m.Sequence) // 按顺序排序
+                    .ToTree(it => it.Children, it => it.ParentId, 0, it => it.Id)
+                    .ToList();
+
+                menuTree = FilterMenuByModule(menuTree, _currentModule);
+            }
+            else  //没登录的时候，只显示登录界面
+            {
+                menuTree = SSC.Db.Queryable<AppMenu>()
+                    .Where(m => m.Code == "Login1st") // 只查询激活菜单
+                    .ToList();
+            }
+
+            // 4. 应用权限过滤并转换为前端格式
+            _menuData = AppMenu.CreateMenu(menuTree, userPermissions);
+            _isLoaded = true;
+        }
+        if (firstRender)
+        {
+            await Task.Delay(100); // 确保资源加载
+            _isLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    public LinkItem[] Links =
+    {
+            new LinkItem
+            {
+                Key = "Ant Design Blazor",
+                Title = "Ant Design Blazor",
+                Href = "https://antblazor.com",
+                BlankTarget = true,
+            },
+            new LinkItem
+            {
+                Key = "github",
+                Title = (RenderFragment)(@<Icon Type="github" />),
+                Href = "https://github.com/ant-design-blazor/ant-design-pro-blazor",
+                BlankTarget = true,
+            },
+            new LinkItem
+            {
+                Key = "Blazor",
+                Title = "Blazor",
+                Href = "https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor?WT.mc_id=DT-MVP-5003987",
+                BlankTarget = true,
+            }
+    };
+
+    void Toggle()
+    {
+        collapsed = !collapsed;
+    }
+
+
+    // void Reload()
+    // {
+    //     collapsed = !collapsed;
+    // }
+    [Inject] private ReuseTabsService TabService { get; set; }
+
+    void Reload()
+    {
+        TabService.ReloadPage();
+    }
+
+    // 从浏览器 Cookie 获取用户信息
+    private async Task<User?> GetUserFromCookie()
+    {
+        try
+        {
+            // 1.1 从 Cookie 中获取用户 ID
+            var UserAccount = await GetCookieAsync("UserAccount");
+        
+            if (string.IsNullOrEmpty(UserAccount))
+                return null;
+        
+            // if (!int.TryParse(userIdStr, out int userId))
+            //     return null;
+        
+            // 1.2 从数据库获取用户信息
+            var db = new SqlClient();
+            var user = await db.Db.Queryable<User>()
+                .Where(u => u.Account == UserAccount)
+                .FirstAsync();
+        
+            return user;
+        }
+        catch (Exception ex)
+        {
+            //Logger.LogError(ex, "从 Cookie 获取用户信息失败");
+            return null;
+        }
+    }
+
+    // 动态构建菜单树
+    private void BuildMenuTree(HashSet<string> userPermissions)
+    {
+        var db = new SqlClient();
+    
+        // 3.1 基础查询
+        var query = db.Db.Queryable<AppMenu>()
+            .Where(m => m.Active)
+            .OrderBy(m => m.Sequence);
+    
+        // 3.2 根据权限过滤菜单
+        if (userPermissions.Count > 0)
+        {
+            // 如果用户有权限，排除登录菜单
+            query = query.Where(m => m.Code != "Login1st");
+        
+            // 添加权限过滤
+            if (!userPermissions.Contains("Admin"))
+            {
+                // 普通用户只能看到自己权限内的菜单
+                query = query.Where(m =>
+                    m.PermissionKey == null ||
+                    userPermissions.Any(p => m.PermissionKey.Contains(p))
+                );
+            }
+        }
+        else
+        {
+            // 未登录用户只显示登录菜单
+            query = query.Where(m => m.Code == "Login1st");
+        }
+    
+        // 3.3 转换为树形结构
+        var _menuTree = query.ToTree(
+            it => it.Children,
+            it => it.ParentId,
+            0,
+            it => it.Id
+        ).ToList();
+    }
+}
+
+@code{
+    /// <summary>
+    /// 按模块过滤菜单
+    /// </summary>
+    private List<AppMenu> FilterMenuByModule(List<AppMenu> menus, string module)
+    {
+        var filtered = new List<AppMenu>();
+        foreach (var menu in menus)
+        {
+            // 匹配当前模块的菜单
+            if (menu.Module == module || menu.Module == "Common" || menu.Module == "Common" == null) // 需给AppMenu实体加Module字段，对应数据库新增Module字段
+            {
+                // 递归过滤子菜单
+                if (menu.Children != null && menu.Children.Any())
+                {
+                    menu.Children = FilterMenuByModule(menu.Children, module);
+                }
+                filtered.Add(menu);
+            }
+        }
+        return filtered;
+    }
+
+    /// <summary>
+    /// 不想改数据库的话用这个，按路由前缀过滤
+    /// </summary>
+    private List<AppMenu> FilterMenuByPathPrefix(List<AppMenu> menus, string prefix)
+    {
+        var filtered = new List<AppMenu>();
+        foreach (var menu in menus)
+        {
+            if (menu.Path.StartsWith(prefix) || (menu.Children != null && menu.Children.Any(c => c.Path.StartsWith(prefix))))
+            {
+                if (menu.Children != null && menu.Children.Any())
+                {
+                    menu.Children = FilterMenuByPathPrefix(menu.Children, prefix);
+                }
+                filtered.Add(menu);
+            }
+        }
+        return filtered;
+    }
+
+    /// <summary>
+    /// 切换模块，跳回选择页
+    /// </summary>
+    private async Task SwitchModule()
+    {
+        await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "currentModule");
+        NavigationManager.NavigateTo("/module-selector");
+    }
+}
+@code{
+
+    private readonly IJSRuntime _jsRuntime;
+
+    public async Task<string?> GetCookieAsync(string name)
+    {
+        try
+        {
+            return await _jsRuntime.InvokeAsync<string>("getCookie", name);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task SetCookieAsync(string name, string value, int days = 30)
+    {
+        await _jsRuntime.InvokeVoidAsync("setCookie", name, value, days);
+    }
+
+    public async Task DeleteCookieAsync(string name)
+    {
+        await _jsRuntime.InvokeVoidAsync("deleteCookie", name);
+    }
+
+}
+<script>
+    window.getCookie = function (name) {
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        return match ? decodeURIComponent(match[2]) : null;
+    };
+
+    window.setCookie = function (name, value, days) {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        document.cookie = `${name}=${encodeURIComponent(value)};expires=${date.toUTCString()};path=/;secure;samesite=lax`;
+    };
+
+</script>

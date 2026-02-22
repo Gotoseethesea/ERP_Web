@@ -1,0 +1,92 @@
+﻿@* DynamicButtonGroup.razor *@
+@using ERP_Web.Core.Service
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@using Microsoft.AspNetCore.Components.Authorization
+@using AntDesign
+@using System.Security.Claims
+@inject PermissionService PermissionService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUserContext UserContext
+<Affix OffsetTop="@_offsetTop">
+    @if (_isLoading)
+    {
+        <Skeleton Active="true" />
+    }
+    else if (Buttons != null && Buttons.Any())
+    {
+        <Space>
+            <div class="button-container" style="margin-top: 20px;">
+            @foreach (var button in Buttons)
+            {
+                <Button Type="@GetButtonType(button.ButtonType)"
+                        Icon="@button.IconType"
+                        Disabled="@button.IsDisabled"
+                        OnClick="@(async () => await HandleButtonClick(button.ActionName))">
+                    @button.DisplayText
+                </Button>
+            }
+            </div>
+        </Space>
+    }
+    else
+    {
+        <div style="display: none;">
+            <!-- 没有按钮时不显示任何内容，但保留占位 -->
+        </div>
+    }
+</Affix>
+
+@code {
+    [Parameter] public string PageRoute { get; set; }
+    [Parameter] public EventCallback<string> OnButtonClick { get; set; }
+
+    private List<SysButton> Buttons { get; set; }
+    private int _offsetTop = 80;
+    private bool _isLoading = true;
+    public User _currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _currentUser = await UserContext.GetCurrentUserAsync();
+
+            if (_currentUser == null)
+            {
+                Buttons = new List<SysButton>();
+                return;
+            }
+            
+            // 获取授权按钮
+            Buttons = PermissionService.GetAuthorizedButtons(_currentUser, PageRoute) ?? new List<SysButton>();
+            Console.WriteLine($"加载按钮");
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"加载按钮失败: {ex.Message}");
+            Buttons = new List<SysButton>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    
+    // 处理按钮点击事件
+    private async Task HandleButtonClick(string actionName)
+    {
+        await OnButtonClick.InvokeAsync(actionName);
+    }
+    
+    private ButtonType GetButtonType(string buttonTypeStr)
+    {
+        if (Enum.TryParse<ButtonType>(buttonTypeStr, true, out var buttonType))
+        {
+            return buttonType;
+        }
+        return ButtonType.Primary;
+    }
+}

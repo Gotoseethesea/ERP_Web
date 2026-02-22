@@ -1,0 +1,175 @@
+﻿@page "/inventory-report/inventory_stock_summary"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject MessageService MessageService;
+@using AntDesign
+@using AntDesign.TableModels
+@using ERP_Web.Components.Custom
+@using ERP_Web.Models
+@using ERP_Web.Models.Report
+@using ERP_Web.Repository
+
+<PageHeader Title="收发存汇总表" SubTitle="库存进销存统计"></PageHeader>
+
+<Card>
+    <FilterPanel @ref="filterPanel"
+                 Filters="@Filters"
+                 gutter="@gutter"
+                 OnSearch="Refresh">
+    </FilterPanel>
+</Card>
+
+<DynamicButtonGroup PageRoute="inventory_stock_summary" OnButtonClick="HandleButtonClick" />
+
+
+
+@if (Data == null || Data.Count == 0)
+{
+    <Alert Type="AlertType.Info" Message="暂无数据" Style="margin-top: 16px" />
+}
+else
+{
+    <Table @ref="_table" TItem="InventoryStockSummaryDto"
+           DataSource="Data"
+           ScrollX="1800"
+           StickyOffsetHeader="64"
+           Size="TableSize.Small"
+           HidePagination
+           Bordered>
+        <PropertyColumn Property="c => c.WarehouseName" Title="仓库" Fixed="ColumnFixPlacement.Left" Width="120px" />
+        <PropertyColumn Property="c => c.InvCode" Title="商品编码" Width="120px" />
+        <PropertyColumn Property="c => c.InvName" Title="商品名称" Width="200px" />
+        <PropertyColumn Property="c => c.SpecDescription" Title="规格" Width="150px" />
+        <PropertyColumn Property="c => c.Unit" Title="单位" Width="80px" />
+
+        <PropertyColumn Property="c => c.BeginQty" Title="期初数量" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.BeginPrice" Title="期初单价" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.BeginAmount" Title="期初金额" Align="ColumnAlign.Right" Width="120px" />
+
+        <PropertyColumn Property="c => c.InQty" Title="入库数量" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.InPrice" Title="入库单价" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.InAmount" Title="入库金额" Align="ColumnAlign.Right" Width="120px" />
+
+        <PropertyColumn Property="c => c.OutQty" Title="出库数量" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.OutPrice" Title="出库单价" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.OutAmount" Title="出库金额" Align="ColumnAlign.Right" Width="120px" />
+
+        <PropertyColumn Property="c => c.EndQty" Title="结余数量" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.EndPrice" Title="结余单价" Align="ColumnAlign.Right" Width="120px" />
+        <PropertyColumn Property="c => c.EndAmount" Title="结余金额" Align="ColumnAlign.Right" Width="120px" />
+    </Table>
+}
+
+@code{
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24
+    };
+    private List<FilterPanel.FilterItem> Filters = new();
+    private FilterPanel filterPanel;
+    private Table<InventoryStockSummaryDto> _table;
+    List<InventoryStockSummaryDto> Data = new();
+    List<Warehouse> Warehouses = Warehouse.Select();
+    List<Category> Categories = Category.Select();
+
+    int selectYear = DateTime.Now.Year;
+    int selectMonth = DateTime.Now.Month;
+    string? selectWarehouseCode;
+    string? selectCategoryCode;
+    string? searchInvName;
+
+    protected override void OnInitialized()
+    {
+        InitializeFilters();
+    }
+
+    private void InitializeFilters()
+    {
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "年度",
+            Type = FilterPanel.FilterType.Select,
+            Options = Enumerable.Range(2022, DateTime.Now.Year - 2021).Select(y => new FilterPanel.OptionItem { Value = y.ToString(), Label = y.ToString() }).ToList(),
+            //DefaultValue = selectYear.ToString()
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "月份",
+            Type = FilterPanel.FilterType.Select,
+            Options = Enumerable.Range(1, 12).Select(m => new FilterPanel.OptionItem { Value = m.ToString(), Label = m.ToString() }).ToList(),
+            //DefaultValue = selectMonth.ToString()
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "仓库",
+            Type = FilterPanel.FilterType.Select,
+            Options = Warehouses.Select(d => new FilterPanel.OptionItem { Value = d.Code, Label = d.Name }).ToList()
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "商品分类",
+            Type = FilterPanel.FilterType.Select,
+            Options = Categories.Select(d => new FilterPanel.OptionItem { Value = d.Code, Label = d.Name }).ToList()
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "商品名称",
+            Type = FilterPanel.FilterType.Like,
+            Placeholder = "输入商品名称搜索"
+        });
+    }
+
+    private async Task Refresh()
+    {
+        try
+        {
+            var cond = filterPanel.GenerateConditionalModels();
+
+            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(cond));
+            selectYear = int.Parse(Filters.First(x => x.Label == "年度").SelectedValues?.First()?.ToString());
+            selectMonth = int.Parse(Filters.First(x => x.Label == "月份").SelectedValues?.First()?.ToString());
+            //selectYear = int.Parse(cond.First(x => x.ConditionalCollections == "年度").FieldValue);
+            //selectMonth = int.Parse(cond.First(x => x.FieldName == "月份").FieldValue);
+            // selectWarehouseCode = cond.FirstOrDefault(x => x.FieldName == "仓库")?.FieldValue;
+            // selectCategoryCode = cond.FirstOrDefault(x => x.FieldName == "商品分类")?.FieldValue;
+            // searchInvName = cond.FirstOrDefault(x => x.FieldName == "商品名称")?.FieldValue;
+
+            Data = await Task.Run(() => InventoryReport.GetStockSummary(selectYear, selectMonth, selectWarehouseCode, searchInvName, selectCategoryCode));
+            MessageService.Success("查询成功");
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"查询失败：{ex.Message}");
+        }
+    }
+
+    private async Task HandleButtonClick(string actionName)
+    {
+        switch (actionName)
+        {
+            case "Refresh":
+                await Refresh();
+                break;
+            case "ExportExcel":
+                ExportExcel();
+                break;
+        }
+    }
+
+    private void ExportExcel()
+    {
+        // 这里加NPOI导出Excel逻辑，和你现有系统导出逻辑一致即可
+        MessageService.Info("导出功能开发中");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.Delay(500);
+            await Refresh();
+        }
+    }
+}

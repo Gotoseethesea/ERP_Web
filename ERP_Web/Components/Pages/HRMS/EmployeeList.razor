@@ -1,0 +1,67 @@
+﻿@page "/HR/EmployeeList"
+@rendermode InteractiveServer
+@inject MessageService MessageService
+@inject NavigationManager NavigationManager
+@using ERP_Web.Repository;
+@using ERP_Web.Models;
+
+<PageTitle>员工档案管理</PageTitle>
+
+<Row Gutter="16" Style="margin-bottom:16px">
+    <Col>
+        <Title Level="3">员工档案管理</Title>
+    </Col>
+    <Col>
+        <Input Placeholder="搜索姓名/工号" Style="width:300px" @bind-Value="_searchKey" />
+        <Button Type="ButtonType.Primary" OnClick="LoadData" Style="margin-left:8px">搜索</Button>
+    </Col>
+    <Col>
+        <Button Type="ButtonType.Primary" OnClick="AddEmployee">新增员工</Button>
+    </Col>
+</Row>
+
+<Table DataSource="@_employeeList" TItem="Employee" Loading="_loading" HidePagination="false" PageSize="20" >
+    <PropertyColumn Property="c => c.Code" Title="工号" Width="100" />
+    <PropertyColumn Property="c => c.Name" Title="姓名" Width="100" />
+    <PropertyColumn Property="c => c.Department.Name" Title="部门" Width="150" />
+    <PropertyColumn Property="c => c.Position.Name" Title="岗位" Width="150" />
+    <PropertyColumn Property="c => c.HireDate" Title="入职日期" Width="120" />
+    <PropertyColumn Property="c => c.Status" Title="状态" Width="100" >
+    </PropertyColumn>
+    <ActionColumn Title="操作" Width="200">
+        <Button Size="ButtonSize.Small" OnClick="() => ViewEmployee(context)">查看</Button>
+        <Button Size="ButtonSize.Small" OnClick="() => EditEmployee(context)" Style="margin-left:4px">编辑</Button>
+        <Button Size="ButtonSize.Small" OnClick="() => AddHrTrx(context)" Type="ButtonType.Dashed" Style="margin-left:4px">发起异动</Button>
+    </ActionColumn>
+</Table>
+
+@code {
+    private string _searchKey;
+    private bool _loading;
+    private List<Employee> _employeeList = [];
+
+    protected override void OnInitialized()
+    {
+        LoadData();
+    }
+
+    private void LoadData()
+    {
+        _loading = true;
+        var db = new SqlClient().Db;
+        var query = db.Queryable<Employee>()
+            .Includes(e => e.Department)
+            .Includes(e => e.Position);
+        if (!string.IsNullOrEmpty(_searchKey))
+        {
+            query = query.Where(e => e.Code.Contains(_searchKey) || e.Name.Contains(_searchKey));
+        }
+        _employeeList = query.ToList();
+        _loading = false;
+    }
+
+    private void AddEmployee() => NavigationManager.NavigateTo("/HR/EmployeeEdit");
+    private void ViewEmployee(Employee emp) => NavigationManager.NavigateTo($"/HR/EmployeeView/{emp.Code}");
+    private void EditEmployee(Employee emp) => NavigationManager.NavigateTo($"/HR/EmployeeEdit/{emp.Code}");
+    private void AddHrTrx(Employee emp) => NavigationManager.NavigateTo($"/HR/HrTrxEdit?empCode={emp.Code}");
+}

@@ -1,0 +1,296 @@
+﻿@page "/inventory/closing"
+@page "/inventory-MonthlyClosing"
+
+@using AntDesign
+@using ERP_Web.Models
+@inject IMessageService _message
+
+
+<PageHeader Title="库存月度结账" SubTitle="对当前会计期间的库存成本进行结转"> </PageHeader>
+<Breadcrumb>
+    <BreadcrumbItem>库存管理</BreadcrumbItem>
+    <BreadcrumbItem>库存结账</BreadcrumbItem>
+</Breadcrumb>
+
+<Row Gutter="16" Style="margin-top: 16px;">
+    <Col Span="12">
+    <Card Bordered="false" Hoverable="true">
+        <Statistic Title="当前会计期间" Value="@($"{CurrentYear}年{CurrentMonth}月")" />
+        <Divider />
+        <Descriptions Column="2" Size="DescriptionsSize.Small">
+            <DescriptionsItem Title="结账日期">@CurrentClosingDate.ToString("yyyy-MM-dd")</DescriptionsItem>
+            <DescriptionsItem Title="结账状态">
+                <Tag Color="@(IsCurrentClosed ? "green" : "orange")">@(IsCurrentClosed ? "已结账" : "未结账")</Tag>
+            </DescriptionsItem>
+            <DescriptionsItem Title="上次结账日期">@(LastClosingDate?.ToString("yyyy-MM-dd") ?? "无")</DescriptionsItem>
+            <DescriptionsItem Title="当前期间单据总数">
+                @AllInvTrxCount <Badge Count="@AllInvTrxCount" Status="@(AllInvTrxCount > 0 ? BadgeStatus.Warning : BadgeStatus.Success)" />
+            </DescriptionsItem>
+            <DescriptionsItem Title="未审核单据数量">
+                @UnAuditCount<Badge Count="@UnAuditCount" Status="@(UnAuditCount > 0 ? BadgeStatus.Warning : BadgeStatus.Success)" />
+            </DescriptionsItem>
+        </Descriptions>
+
+        <Alert Style="margin-top: 16px;"
+               Message="@(UnAuditCount > 0 ? $"存在{UnAuditCount}张未审核出入库单据，结账前请先审核所有单据" : "单据检查通过")"
+               Type="@(UnAuditCount > 0 ? AlertType.Warning : AlertType.Success)"
+               ShowIcon="true" />
+    </Card>
+</Col>
+<Col Span="12">
+<Card Bordered="false" Title="结账操作" Hoverable="true">
+    <div Style="text-align: center; padding: 32px 0;">
+        <Icon Type="inbox" Theme="IconThemeType.Outline" Style="font-size: 48px; color: #1890ff; margin-bottom: 16px;" />
+        <h4>@(IsCurrentClosed ? "当前期间已完成结账" : "当前期间待结账")</h4>
+        <p Style="color: #999; margin: 16px 0;">
+            结账后将锁定当前期间的所有出入库单据，无法再进行修改
+        </p>
+        <Button Type="ButtonType.Primary"
+                Size="ButtonSize.Large"
+                Disabled="@(IsCurrentClosed || UnAuditCount > 0 || ClosingInProgress || ReverseInProgress)"
+                OnClick="ShowClosingConfirm">
+            @(ClosingInProgress ? "结账中..." : "执行库存结账")
+        </Button>
+    </div>
+</Card>
+</Col>
+</Row>
+
+<Card Bordered="false" Title="历史结账记录" Style="margin-top: 16px;">
+    <Table TItem="InventoryClosingRecord" DataSource="@ClosingRecords">
+        <Column TData="int" DataIndex="@nameof(InventoryClosingRecord.Id)" Title="ID" />
+        <Column TData="DateOnly" DataIndex="@nameof(InventoryClosingRecord.ClosingDate)" Title="结账日期" />
+        <Column TData="ClosingStatus" DataIndex="@nameof(InventoryClosingRecord.Status)" Title="状态">
+            <Template>
+                <Tag Color="@(context.Status == ClosingStatus.Completed ? "green" : "red")">@context.Status.ToString()</Tag>
+            </Template>
+        </Column>
+        <Column TData="DateTime" DataIndex="@nameof(InventoryClosingRecord.CreatedAt)" Title="操作时间" />
+        <!-- 新增反结账操作列 -->
+        <ActionColumn Title="操作" Width="120">
+            <Template>
+                @if (context.Status == ClosingStatus.Completed && context.Id == ClosingRecords.OrderByDescending(x => x.ClosingDate).FirstOrDefault()?.Id)
+                {
+                    <Button Type="ButtonType.Dashed" Size="ButtonSize.Small" OnClick="() => ShowReverseConfirm(context)" Disabled="@(ClosingInProgress || ReverseInProgress)">
+                        反结账
+                    </Button>
+                }
+                else
+                {
+                    <Button Type="ButtonType.Default" Size="ButtonSize.Small" Disabled>
+                        反结账
+                    </Button>
+                }
+            </Template>
+        </ActionColumn>
+    </Table>
+</Card>
+
+<!-- 结账确认弹窗 -->
+<Modal Title="确认库存结账"
+       Visible="@ConfirmVisible"
+       OnOk="PerformClosing"
+       OnCancel="() => ConfirmVisible = false"
+       OkButtonProps="@(new ButtonProps { Danger = true, Disabled = ClosingInProgress })">
+    @if (ClosingInProgress)
+    {
+        <div>
+            <p>正在执行结账，请不要关闭页面...</p>
+        </div>
+    }
+    else
+    {
+        <Alert Message="重要提醒" Type="AlertType.Warning" ShowIcon="true" Style="margin-bottom: 16px;" />
+        <ul>
+            <li>结账后将锁定 @CurrentYear 年 @CurrentMonth 月的所有库存单据，无法新增、修改、删除</li>
+            <li>系统将自动计算当月所有存货的出库成本和期末库存余额</li>
+            <li>结账过程预计需要1-5分钟，请耐心等待</li>
+        </ul>
+        <Checkbox Style="margin-top: 16px;" @bind-Checked="@ConfirmChecked">我已确认所有单据审核完毕，了解结账风险</Checkbox>
+    }
+</Modal>
+
+<!-- 新增反结账确认弹窗 -->
+<Modal Title="确认反结账"
+       Visible="@ReverseConfirmVisible"
+       OnOk="PerformReverseClosing"
+       OnCancel="() => ReverseConfirmVisible = false"
+       OkButtonProps="@(new ButtonProps { Danger = true, Disabled = ReverseInProgress })">
+    @if (ReverseInProgress)
+    {
+        <div>
+            <p>正在执行反结账，请不要关闭页面...</p>
+        </div>
+    }
+    else
+    {
+        <Alert Message="高危操作提醒" Type="AlertType.Warning" ShowIcon="true" Style="margin-bottom: 16px;" />
+        <ul>
+            <li>反结账将删除 @ReverseTarget?.ClosingDate.ToString("yyyy年MM月") 的结账记录，解除该期间所有单据锁定</li>
+            <li>反结账后可以修改该期间的出入库单据，修改完成后需重新执行结账</li>
+            <li>仅允许对最近一次已结账的期间执行反结账，若需反结更早期间请先依次反结后续期间</li>
+        </ul>
+        <Checkbox Style="margin-top: 16px;" @bind-Checked="@ReverseConfirmChecked">我已确认操作风险，确认执行反结账</Checkbox>
+    }
+</Modal>
+
+@code {
+    private bool Loading { get; set; }
+    private bool ConfirmVisible { get; set; }
+    private bool ConfirmChecked { get; set; }
+    private bool ClosingInProgress { get; set; }
+    private int ClosingProgress { get; set; }
+    private bool IsCurrentClosed { get; set; }
+    private int CurrentYear { get; set; } = DateTime.Now.Year;
+    private int CurrentMonth { get; set; } = DateTime.Now.Month;
+    private DateTime CurrentClosingDate => new DateTime(CurrentYear, CurrentMonth, DateTime.DaysInMonth(CurrentYear, CurrentMonth));
+    private DateTime? LastClosingDate { get; set; }
+    private int UnAuditCount { get; set; }
+    private int AllInvTrxCount { get; set; }
+    private List<InventoryClosingRecord> ClosingRecords { get; set; } = new();
+
+    // 反结账相关变量
+    private bool ReverseConfirmVisible { get; set; }
+    private bool ReverseConfirmChecked { get; set; }
+    private bool ReverseInProgress { get; set; }
+    private InventoryClosingRecord? ReverseTarget { get; set; }
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Loading = true;
+        await LoadData();
+        Loading = false;
+    }
+
+    private async Task LoadData()
+    {
+        // TODO: 替换为你的实际接口调用
+        // 模拟加载数据
+        await Task.Delay(500);
+        IsCurrentClosed = false;
+        UnAuditCount = 2;
+        var lastClosingRecord = InventoryClosingRecord.GetLastCompleted();
+
+        // 🔴 计算待结账的年月：上次结账的下一个月，无历史记录则取当前年月
+        int targetYear, targetMonth;
+        if (lastClosingRecord != null)
+        {
+            targetYear = lastClosingRecord.ClosingDate.Year;
+            targetMonth = lastClosingRecord.ClosingDate.Month + 1;
+            // 跨年处理
+            if (targetMonth > 12)
+            {
+                targetYear += 1;
+                targetMonth = 1;
+            }
+            LastClosingDate = lastClosingRecord.ClosingDate.ToDateTime(TimeOnly.MinValue);
+        }
+        else
+        {
+            // 第一次结账，默认取当前年月
+            targetYear = DateTime.Now.Year;
+            targetMonth = DateTime.Now.Month;
+            LastClosingDate = null;
+        }
+        CurrentYear = targetYear;
+        CurrentMonth = targetMonth;
+
+        UnAuditCount = InventoryTransaction.SelectForClosing(CurrentYear, CurrentMonth);
+        AllInvTrxCount = InventoryTransaction.Select(CurrentYear, CurrentMonth).Count();
+
+        // 判断当前期间是否已结账
+        IsCurrentClosed = InventoryClosingRecord.IsPeriodClosed(CurrentYear, CurrentMonth);
+
+        // 加载历史结账记录
+        ClosingRecords = InventoryClosingRecord.Select();
+    }
+
+    private void ShowClosingConfirm()
+    {
+        ConfirmChecked = false;
+        ClosingProgress = 0;
+        ClosingInProgress = false;
+        ConfirmVisible = true;
+    }
+
+    private async Task PerformClosing()
+    {
+        if (!ConfirmChecked)
+        {
+            _message.Warning("请先勾选确认选项");
+            return;
+        }
+
+        ClosingInProgress = true;
+        StateHasChanged();
+
+        // 模拟结账进度
+        for (int i = 0; i <= 100; i += 10)
+        {
+            ClosingProgress = i;
+            StateHasChanged();
+            await Task.Delay(200);
+        }
+
+        try
+        {
+            // 调用优化后的结账接口
+            InventoryMonthlyClosing.PerformMonthlyClosing(CurrentYear, CurrentMonth,true);
+            _message.Success($"【{CurrentYear}年{CurrentMonth}月】库存结账完成");
+            ConfirmVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _message.Error($"结账失败：{ex.Message}");
+        }
+        finally
+        {
+            ClosingInProgress = false;
+            StateHasChanged();
+        }
+
+        ConfirmVisible = false;
+    }
+
+    // 反结账相关方法
+    private void ShowReverseConfirm(InventoryClosingRecord record)
+    {
+        ReverseTarget = record;
+        ReverseConfirmChecked = false;
+        ReverseInProgress = false;
+        ReverseConfirmVisible = true;
+    }
+
+    private async Task PerformReverseClosing()
+    {
+        if (!ReverseConfirmChecked || ReverseTarget == null)
+        {
+            _message.Warning("请先勾选确认选项");
+            return;
+        }
+
+        ReverseInProgress = true;
+        StateHasChanged();
+
+        try
+        {
+            // 调用反结账接口
+            InventoryMonthlyClosing.ReverseClosing(ReverseTarget.ClosingDate.Year, ReverseTarget.ClosingDate.Month);
+            _message.Success($"【{ReverseTarget.ClosingDate:yyyy年MM月}】反结账完成");
+            ReverseConfirmVisible = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            _message.Error($"反结账失败：{ex.Message}");
+        }
+        finally
+        {
+            ReverseInProgress = false;
+            StateHasChanged();
+        }
+    }
+}

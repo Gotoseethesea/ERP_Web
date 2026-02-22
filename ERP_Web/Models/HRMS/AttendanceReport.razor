@@ -1,0 +1,297 @@
+﻿@page "/hr/report/attendance"
+@using AntDesign
+@using SqlSugar
+@using AntDesign.TableModels
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using System.Linq
+@using ERP_Web.Models.HRMS
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+
+<h3>考勤报表</h3>
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="月份">
+                <DatePicker TValue="DateOnly?" Format="yyyy-MM" Picker="DatePickerType.Month" @bind-Value="@MonthFilter" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="部门">
+                <Select Mode="SelectMode.Multiple"
+                        Placeholder="请选择部门"
+                        @bind-Values="@DeptSelected"
+                        TItemValue="string"
+                        TItem="string"
+                        EnableSearch
+                        AllowClear>
+                    <SelectOptions>
+                        @foreach (var item in Deptlist)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value=@item.Code Label=@item.Name />
+                        }
+                    </SelectOptions>
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="员工姓名">
+                <Input @bind-Value="@Keyword" Placeholder="请输入员工姓名" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2" Offset="10">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" HtmlType="button">
+                搜索
+            </Button>
+            <Button OnClick="Export" Icon="@IconType.Outline.Download" Type="@ButtonType.Default" Style="margin-left: 8px;">
+                导出
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<Table DataSource="@data" TItem="AttendanceReportDto" Context="rowData" Size="TableSize.Small" RowKey="Row => Row.EmployeeId"
+       Resizable
+       HidePagination Bordered
+       ScrollX="1800" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => c.EmployeeCode" Title="工号" Width="100" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.EmployeeName" Title="姓名" Width="100" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.DepartmentName" Title="部门" Width="150" />
+    <PropertyColumn Property="c => c.TotalDays" Title="应出勤天数" Width="120" Align="ColumnAlign.Right" />
+    <PropertyColumn Property="c => c.ActualDays" Title="实际出勤天数" Width="120" Align="ColumnAlign.Right" />
+    <PropertyColumn Property="c => c.LateCount" Title="迟到次数" Width="100" Align="ColumnAlign.Right">
+        <Tag Color="@(rowData.LateCount > 3 ? "orange" : "")">@rowData.LateCount</Tag>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.EarlyLeaveCount" Title="早退次数" Width="100" Align="ColumnAlign.Right">
+        <Tag Color="@(rowData.EarlyLeaveCount > 2 ? "orange" : "")">@rowData.EarlyLeaveCount</Tag>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.AbsentCount" Title="旷工天数" Width="100" Align="ColumnAlign.Right">
+        <Tag Color="@(rowData.AbsentCount > 0 ? "red" : "")">@rowData.AbsentCount</Tag>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.LeaveDays" Title="请假天数" Width="100" Align="ColumnAlign.Right" />
+    <PropertyColumn Property="c => c.OvertimeHours" Title="加班时长" Width="100" Align="ColumnAlign.Right">
+        @rowData.OvertimeHours.ToString("0.0")h
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.WorkHours" Title="总工作时长" Width="120" Align="ColumnAlign.Right">
+        @rowData.WorkHours.ToString("0.0")h
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.AttendanceRate" Title="出勤率" Width="100" Align="ColumnAlign.Right">
+        <Progress Percent="@((int)(rowData.AttendanceRate * 100))" Size="ProgressSize.Small" />
+    </PropertyColumn>
+</Table>
+
+@code {
+    List<Department> Deptlist = Department.Select();
+    IEnumerable<string> DeptSelected;
+    DateOnly? MonthFilter = DateOnly.FromDateTime(DateTime.Now);
+    string Keyword;
+    object FilterModel = new object();
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    // 考勤报表DTO，不需要实体类，直接查询映射即可
+    public class AttendanceReportDto
+    {
+        public long EmployeeId { get; set; }
+        public string EmployeeCode { get; set; }
+        public string EmployeeName { get; set; }
+        public string DepartmentName { get; set; }
+        public int TotalDays { get; set; }
+        public int ActualDays { get; set; }
+        public int LateCount { get; set; }
+        public int EarlyLeaveCount { get; set; }
+        public int AbsentCount { get; set; }
+        public decimal LeaveDays { get; set; }
+        public decimal OvertimeHours { get; set; }
+        public decimal WorkHours { get; set; }
+        public decimal AttendanceRate => TotalDays > 0 ? (decimal)(ActualDays + LeaveDays) / TotalDays : 0;
+    }
+
+    List<AttendanceReportDto> data = new List<AttendanceReportDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    public async Task Refresh2()
+    {
+        try
+        {
+            if (!MonthFilter.HasValue) return;
+
+            var startDate = new DateTime(MonthFilter.Value.Year, MonthFilter.Value.Month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+
+            SqlClient SSC = new SqlClient();
+            // 分组统计考勤数据
+            var query = SSC.Db.Queryable<AttendanceRecord>()
+                .Includes(a => a.Employee, e => e.Department)
+                .Where(a => a.AttendanceDate >= startDate && a.AttendanceDate <= endDate && a.Active);
+
+            // 部门筛选
+            if (DeptSelected != null && DeptSelected.Any())
+            {
+                var deptIds = Deptlist.Where(d => DeptSelected.Contains(d.Code)).Select(d => d.Code).ToList();
+                query = query.Where(a => deptIds.Contains(a.Employee.DepartmentCode));
+            }
+
+            // 姓名筛选
+            if (!string.IsNullOrEmpty(Keyword))
+            {
+                query = query.Where(a => a.Employee.Name.Contains(Keyword));
+            }
+
+            // 分组统计
+            data = await query.GroupBy(a => new { a.EmployeeId, a.Employee.Code, a.Employee.Name, DepartmentName = a.Employee.Department.Name })
+                .Select(g => new AttendanceReportDto
+                {
+                    EmployeeId = g.EmployeeId,
+                    EmployeeCode = g.Employee.Code,
+                    EmployeeName = g.Employee.Name,
+                    DepartmentName = g.Employee.Department.Name,
+                    TotalDays = DateTime.DaysInMonth(MonthFilter.Value.Year, MonthFilter.Value.Month),
+                    // ActualDays = g.Count(a => a.Status == 0),
+                    // LateCount = g.Count(a => a.Status == 1),
+                    // EarlyLeaveCount = g.Count(a => a.Status == 2),
+                    // AbsentCount = g.Count(a => a.Status == 3),
+                    // LeaveDays = g.Count(a => a.Status == 4),
+                    // WorkHours = g.Sum(a => a.WorkHours),
+                    // OvertimeHours = g.Sum(a => a.WorkHours > 8 ? a.WorkHours - 8 : 0)
+                }).ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询考勤报表失败：{ex.Message}");
+            data = new List<AttendanceReportDto>();
+        }
+    }
+
+    public async Task Refresh4()
+    {
+        try
+        {
+            if (!MonthFilter.HasValue) return;
+
+            var startDate = new DateTime(MonthFilter.Value.Year, MonthFilter.Value.Month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+            var totalDays = DateTime.DaysInMonth(MonthFilter.Value.Year, MonthFilter.Value.Month);
+
+            SqlClient SSC = new SqlClient();
+            // 分组统计考勤数据（修正分组语法）
+            data = await SSC.Db.Queryable<AttendanceRecord>()
+                // ✅ 修正导航属性写法
+                .Includes(a => a.Employee,e => e.Department)
+                .Where(a => a.AttendanceDate >= startDate && a.AttendanceDate <= endDate && a.Active)
+                // ✅ 部门筛选
+                .WhereIF(DeptSelected != null && DeptSelected.Any(),
+                    a => DeptSelected.Contains(a.Employee.DepartmentCode))
+                // ✅ 姓名筛选
+                .WhereIF(!string.IsNullOrEmpty(Keyword),
+                    a => a.Employee.Name.Contains(Keyword))
+                // ✅ 分组：所有需要返回的字段都要放到分组Key里
+                .GroupBy(a => new
+                {
+                    a.EmployeeId,
+                    a.Employee.Code,
+                    a.Employee.Name,
+                    DepartmentName = a.Employee.Department.Name
+                })
+                // ✅ 用SqlSugar内置聚合函数统计
+                .Select(g => new AttendanceReportDto
+                {
+                    EmployeeId = g.Employee.Id,
+                    EmployeeCode = g.Employee.Code,
+                    EmployeeName = g.Employee.Name,
+                    DepartmentName = g.Employee.Department.Name, // 部门名称从分组Key取
+                    TotalDays = totalDays, // 直接赋值当月总天数，不需要统计
+                    // ✅ 条件计数用SqlFunc.CountIf
+                    // ActualDays = g.Count(a => a.Status == 0),
+                    // LateCount = SqlFunc.Count(g.Key.EmployeeId, g.Status == 1),
+                    // EarlyLeaveCount = SqlFunc.Count(g.Key.EmployeeId, g.Status == 2),
+                    // AbsentCount = SqlFunc.CountIf(g.Key.EmployeeId, g.Status == 3),
+                    // LeaveDays = SqlFunc.CountIf(g.Key.EmployeeId, g.Status == 4),
+                    // WorkHours = SqlFunc.Sum(g.WorkHours),
+                    // // ✅ 加班时长统计用SqlFunc.IIF条件判断
+                    // OvertimeHours = Sum(SqlFunc.IIF(g.WorkHours > 8, g.WorkHours - 8, 0))
+                }).ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询考勤报表失败：{ex.Message}");
+            data = new List<AttendanceReportDto>();
+        }
+    }
+
+    // 先确保引用Linq命名空间（页面顶部加）
+
+    public async Task Refresh()
+    {
+        try
+        {
+            if (!MonthFilter.HasValue) return;
+
+            var startDate = new DateTime(MonthFilter.Value.Year, MonthFilter.Value.Month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1);
+            var totalDays = DateTime.DaysInMonth(MonthFilter.Value.Year, MonthFilter.Value.Month);
+
+            SqlClient SSC = new SqlClient();
+            // 👉 第一步：只查明细，不做数据库层面分组
+            var allAttendance = await SSC.Db.Queryable<AttendanceRecord>()
+                .Includes(a => a.Employee,e => e.Department)
+                .Where(a => a.AttendanceDate >= startDate && a.AttendanceDate <= endDate && a.Active)
+                .WhereIF(DeptSelected != null && DeptSelected.Any(),
+                    a => DeptSelected.Contains(a.Employee.DepartmentCode))
+                .WhereIF(!string.IsNullOrEmpty(Keyword),
+                    a => a.Employee.Name.Contains(Keyword))
+                .ToListAsync();
+
+            // 👉 第二步：内存分组，原生C#语法，Count/ Sum完全支持，不会有类型错误
+            data = allAttendance
+                .GroupBy(a => new
+                {
+                    a.EmployeeId,
+                    a.Employee.Code,
+                    a.Employee.Name,
+                    DepartmentName = a.Employee.Department?.Name ?? "未分配"
+                })
+                .Select(g => new AttendanceReportDto
+                {
+                    EmployeeId = g.Key.EmployeeId,
+                    EmployeeCode = g.Key.Code,
+                    EmployeeName = g.Key.Name,
+                    DepartmentName = g.Key.DepartmentName,
+                    TotalDays = totalDays,
+                    // 👇 这里的Count完全是原生Linq方法，不会报CS0411
+                    ActualDays = g.Count(a => a.Status == 0),
+                    LateCount = g.Count(a => a.Status == 1),
+                    EarlyLeaveCount = g.Count(a => a.Status == 2),
+                    AbsentCount = g.Count(a => a.Status == 3),
+                    LeaveDays = g.Count(a => a.Status == 4),
+                    WorkHours = g.Sum(a => a.WorkHours),
+                    OvertimeHours = g.Sum(a => a.WorkHours > 8 ? a.WorkHours - 8 : 0)
+                }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询考勤报表失败：{ex.Message}");
+            data = new List<AttendanceReportDto>();
+        }
+    }
+
+
+
+    private void Export()
+    {
+        // 导出逻辑和现有报表保持一致
+    }
+}

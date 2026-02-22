@@ -1,0 +1,228 @@
+﻿@* InventoryOrderPrintTemplate.razor 独立打印模板 *@
+@using ERP_Web.Models
+@inherits ComponentBase
+@inject IJSRuntime JSRuntime; // 顶部加注入
+@inject ModalService ModalService;
+@inject ConfirmService ConfirmService;
+@inject ModalService ModalService;
+@inject MessageService MessageService;
+@using Append.Blazor.Printing
+@inject IPrintingService PrintService
+@inject IJSRuntime JSRuntime; // 顶部加注入
+
+<div id="inventory-print-template" style="display:@(IsVisible ? "block" : "none")">
+    <div style="padding:2px;font-family:微软雅黑;font-size:14px">
+        <!-- 页眉：公司信息 -->
+        <div style="text-align:center;margin-bottom:2px">
+            <h2 style="margin:0">XX科技有限公司</h2>
+            <!-- 👇 动态判断出入库类型，替换固定的"库存单据" -->
+            <h3 style="margin:5px 0">
+                @(Data.TrxGroup?.TrxType >= 0 ? "入库单" : "出库单")
+            </h3>
+            <p style="margin:0;color:#666">打印时间：@DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</p>
+        </div>
+
+        <!-- 单据基础信息 -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:15px">
+            <tr>
+                <td style="border:1px solid #333;padding:6px"><b>单据号：</b>@Data.Code</td>
+                <td style="border:1px solid #333;padding:6px"><b>单据类型：</b>@Data.TrxGroup.Name</td>
+                <td style="border:1px solid #333;padding:6px"><b>日期：</b>@Data.Date.ToString("yyyy-MM-dd")</td>
+            </tr>
+            <tr>
+                <td colspan="3" style="border:1px solid #333;padding:6px"><b>销方公司：</b>@Data.CompanyName</td>
+            </tr>
+            <tr>
+                <td style="border:1px solid #333;padding:6px"><b>仓库：</b>@Data.WarehouseCode - @Data.WarehouseName</td>
+                <td style="border:1px solid #333;padding:6px"><b>部门：</b>@Data.DepartmentCode - @Data.DepartmentName</td>
+                <td style="border:1px solid #333;padding:6px"><b>职员：</b>@Data.EmployeeCode - @Data.EmployeeName</td>
+            </tr>
+            <tr>
+                <td colspan="3" style="border:1px solid #333;padding:6px"><b>摘要：</b>@Data.Explanation</td>
+            </tr>
+        </table>
+
+        <!-- 商品明细表格 -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:15px">
+            <thead>
+                <tr style="background:#f5f5f5">
+                    <th style="border:1px solid #333;padding:6px;text-align:center">存货编码</th>
+                    <th style="border:1px solid #333;padding:6px;text-align:center">存货名称</th>
+                    <th style="border:1px solid #333;padding:6px;text-align:center">规格</th>
+                    <th style="border:1px solid #333;padding:6px;text-align:center">单位</th>
+                    <th style="border:1px solid #333;padding:6px;text-align:center">数量</th>
+                    <th style="border:1px solid #333;padding:6px;text-align:center">单价</th>
+                    <th style="border:1px solid #333;padding:6px;text-align:center">金额</th>
+                    <th style="border:1px solid #333;padding:6px;text-align:center">含税金额</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Data.ITInvInOuts.Where(x => !string.IsNullOrEmpty(x.InvCode)))
+                {
+                    <tr>
+                        <td style="border:1px solid #333;padding:6px;text-align:center">@row.InvCode</td>
+                        <td style="border:1px solid #333;padding:6px">@row.InventoryItem.Name</td>
+                        <td style="border:1px solid #333;padding:6px">@row.Specification.Description</td>
+                        <td style="border:1px solid #333;padding:6px;text-align:center">@row.Specification.Unit</td>
+                        <td style="border:1px solid #333;padding:6px;text-align:right">@Math.Round(row.Quantity, 2)</td>
+                        <td style="border:1px solid #333;padding:6px;text-align:right">@Math.Round(row.Price, 2)</td>
+                        <td style="border:1px solid #333;padding:6px;text-align:right">@Math.Round(row.Amount, 2)</td>
+                        <td style="border:1px solid #333;padding:6px;text-align:right">@Math.Round(row.AmountIncTax, 2)</td>
+                    </tr>
+                }
+            </tbody>
+            <!-- 合计行 -->
+            <tr>
+                <td colspan="4" style="border:1px solid #333;padding:6px;text-align:right;font-weight:bold">合计：</td>
+                <td style="border:1px solid #333;padding:6px;text-align:right;font-weight:bold">@Math.Round(Data.Quantity, 2)</td>
+                <td style="border:1px solid #333;padding:6px;text-align:right"></td>
+                <td style="border:1px solid #333;padding:6px;text-align:right;font-weight:bold">@Math.Round(Data.Amount, 2)</td>
+                <td style="border:1px solid #333;padding:6px;text-align:right;font-weight:bold">@Math.Round(Data.AmountIncTax, 2)</td>
+            </tr>
+        </table>
+
+        <!-- 底部签字栏 -->
+        <table style="width:100%;margin-top:30px">
+            <tr>
+                <td style="padding:6px;text-align:center">制单人：__________</td>
+                <td style="padding:6px;text-align:center">审批人：__________</td>
+                <td style="padding:6px;text-align:center">记账人：__________</td>
+                <td style="padding:6px;text-align:center">收货人：__________</td>
+            </tr>
+            <tr>
+                <td style="padding:6px;text-align:center">@Data.Operator</td>
+                <td style="padding:6px;text-align:center">@Data.Approver</td>
+                <td style="padding:6px;text-align:center">@Data.Poster</td>
+                <td style="padding:6px;text-align:center"></td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// 库存单据数据
+    /// </summary>
+    [Parameter, EditorRequired]
+    public InventoryTransaction Data { get; set; }
+
+    /// <summary>
+    /// 是否显示模板（打印时临时显示，平时隐藏）
+    /// </summary>
+    [Parameter]
+    public bool IsVisible { get; set; } = false;
+
+
+    private async Task Printold()
+    {
+        //第三方插件打印
+        // 1. 临时显示打印模板，解决display:none导致内容为空的问题
+        await JSRuntime.InvokeVoidAsync("eval", "document.getElementById('inventory-print-template').style.display = 'block'");
+        await Task.Delay(30); // 等待渲染完成
+
+        // 2. ✅ 6.3.0版本正确调用方式
+        PrintService.Print(new PrintOptions
+        {
+            Type = PrintType.Html, // 指定打印类型为HTML元素
+            Printable = "#inventory-print-template", // 打印目标选择器
+            ShowModal = false // 不显示打印加载弹窗
+        });
+
+        // 3. 打印完恢复隐藏
+        await Task.Delay(100);
+        await JSRuntime.InvokeVoidAsync("eval", "document.getElementById('inventory-print-template').style.display = 'none'");
+        MessageService.Success("打印已触发");
+    }
+}
+<style>
+    @@media print {
+        /* 全局隐藏非打印区域 */
+        body * {
+            visibility: hidden;
+        }
+        /* 仅显示打印区域内容 */
+        #print-area, #print-area * {
+            visibility: visible;
+            color: #000 !important;
+        }
+
+        #print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 20px;
+        }
+        /* 表格打印适配 */
+        .ant-table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+        }
+
+            .ant-table th, .ant-table td {
+                border: 1px solid #000 !important;
+                padding: 6px !important;
+                font-size: 12px;
+            }
+        /* 统计数字样式适配 */
+        .ant-statistic-content {
+            color: #000 !important;
+        }
+    }
+</style>
+
+<script>
+    function printElement(elementId) {
+        const printFrame = document.createElement('iframe');
+        printFrame.style.cssText = 'position:absolute;width:0;height:0;border:none;visibility:hidden';
+        document.body.appendChild(printFrame);
+
+        const printDoc = printFrame.contentDocument || printFrame.contentWindow.document;
+        // 仅复制全局样式表，不复制页面自定义style，避免样式冲突
+        const linkStyles = document.querySelectorAll('link[rel="stylesheet"]');
+        linkStyles.forEach(style => {
+            printDoc.head.appendChild(style.cloneNode(true));
+        });
+        // 单独给打印区域设置样式，强制可见
+        const printStyle = printDoc.createElement('style');
+        printStyle.textContent = `
+                page {
+                margin-top: mm !important; /* 强制修改浏览器默认打印顶部边距，从默认15mm改到5mm */
+                margin-bottom: 8mm;
+                margin-left: 8mm;
+                margin-right: 8mm;
+                }
+                * {
+                    visibility: visible !important;
+                    color: #000 !important;
+                    font-family: 微软雅黑;
+                    margin: 0;
+                    padding: 0;
+                }
+                table {
+                    border-collapse: collapse !important;
+                    width: 100% !important;
+                }
+                th, td {
+                    border: 1px solid #333 !important;
+                    padding: 6px !important;
+                    font-size: 13px;
+                }
+                body {
+                    padding: 0mm;
+                }
+            `;
+
+        printDoc.head.appendChild(printStyle);
+
+        // 复制打印模板内容
+        printDoc.body.innerHTML = document.getElementById(elementId).innerHTML;
+
+        // 确保内容加载完成再打印
+        printFrame.contentWindow.focus();
+        setTimeout(() => {
+            printFrame.contentWindow.print();
+            setTimeout(() => document.body.removeChild(printFrame), 100);
+        }, 50);
+    }
+</script>

@@ -1,0 +1,111 @@
+﻿@using AntDesign
+@using ERP_Web.Components.Pages.Inventory
+@using ERP_Web.Models
+
+<Modal @ref="modal"
+       Title="@(currentSpec.Id == 0 ? "添加规格" : "编辑规格")"
+       Width="800"
+       Visible="@visible"
+       OnOk="HandleOk"
+       OnCancel="Close"
+       ConfirmLoading="@saving">
+    <Form Model="@currentSpec" Layout="FormLayout.Vertical">
+        <FormItem Label="规格描述" Required>
+            <Input @bind-Value="@currentSpec.Description" />
+        </FormItem>
+        <FormItem Label="单位" Required>
+            <Input @bind-Value="@currentSpec.Unit" />
+        </FormItem>
+        <FormItem Label="换算率">
+            <Input @bind-Value="@currentSpec.ConversionRatio" />
+        </FormItem>
+         <FormItem Label="关联属性选项" >
+            <Table DataSource="@InvAttributes" TItem="InvAttribute" Style="width: 100%" Context="TableContext">
+                <PropertyColumn Property="c => c.Attribute">
+                    @TableContext.Attribute
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Options">
+                    @if (TableContext.Options?.Any() == true)
+                    {
+                        <Select DataSource="@TableContext.Options"
+                                TItem="InvAttributeOption"
+                                TItemValue="int"
+                                ValueName="@nameof(InvAttributeOption.Id)"
+                                LabelName="@nameof(InvAttributeOption.Value)"
+                                Mode="SelectMode.Default"
+                                Style="width: 100%"
+                                OnSelectedItemChanged="(option => OptionChange(option, TableContext))"
+                                Placeholder="请选择关联的属性选项">
+                        </Select>
+                    }
+                </PropertyColumn>
+             </Table>
+        </FormItem> 
+    </Form>
+</Modal>
+
+@code {
+    private Modal modal;
+    public Specification currentSpec = new Specification("");
+    public List<InvAttribute> InvAttributes = new List<InvAttribute>();
+    private int selectedOptionId;
+    private IEnumerable<int> selectedOptionIds;
+    private List<InvAttributeOption> InvAttributeOptions = new();
+
+    private bool saving;
+    private bool visible;
+
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+
+    [Parameter]
+    public string InvCode { get; set; }
+
+
+    public void Show(Specification spec)
+    {
+        currentSpec = spec;
+        selectedOptionIds = spec.Options?.Select(o => o.Id).ToList() ?? new();
+        InvAttributes = InvAttribute.GetByInvCode(InvCode);
+        //InvAttributeOptions = 
+        visible = true;
+        //modal?.Open();
+    }
+    public void OptionChange(InvAttributeOption option, InvAttribute attribute)
+    {
+        if (option != null)
+        {
+            // 更新当前行的选中选项
+            attribute.SelectedOption = option;
+            // 更新规格描述
+            currentSpec.Description += $"{attribute.Attribute}:{option.Value};";
+        }
+    }
+    public void Close()
+    {
+        visible = false;
+        //modal?.Close();
+    }
+    
+    private async Task HandleOk()
+    {
+        saving = true;
+        StateHasChanged();
+        
+        try
+        {
+            // 更新关联选项
+            currentSpec.Options = selectedOptionIds.Select(id => new InvAttributeOption { Id = id }).ToList();
+            currentSpec.InvCode = InvCode;
+
+            // 触发保存事件
+            await OnSave.InvokeAsync(null);
+            Close();
+        }
+        finally
+        {
+            saving = false;
+            StateHasChanged();
+        }
+    }
+}

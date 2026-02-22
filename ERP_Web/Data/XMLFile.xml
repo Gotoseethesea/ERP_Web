@@ -1,0 +1,574 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<note>
+	分析证书Certificate Of Analysis
+
+	一致性证书Certificate Of Conformity
+
+	质量证书Certificate Of Quality
+
+	测试报告Test Report
+
+	产品性能报告Product Performance Report
+
+	产品规格型号报告Product Specification Report
+
+	工艺数据报告Process Data Report
+
+	首样测试报告First Sample Test Report
+
+	价格／销售目录Price ／Sales Catalogue
+
+	参与方信息Party Information
+
+	农产品加工厂证书Mill Certificate
+
+	家产品加工厂证书Post Receipt
+
+	邮政收据Post Receipt
+
+	重量证书Weight Certificate
+
+	重量单Weight List
+
+	证书Cerificate
+
+	价值与原产地综合证书Combined Certificate Of Value Adn Origin
+
+	数量证书Certificate Of Quantity
+
+	质量数据报文Quality Data Message
+
+	查询 Query
+
+	查询回复Response To Query
+
+	订购单Purchase Order
+
+	制造说明Manufacturing Instructions
+
+	领料单Stores Requisition
+
+	产品售价单Invoicing Data Sheet
+
+	包装说明Packing! Instruction
+
+	内部运输单Internal Transport Order
+
+	统计及其它管理用内部单证 Statistical And Oter Administrative Internal Docu-Ments
+
+	直接支付估价申请Direct Payment Valuation Request
+
+	直接支付估价单Direct Payment Valuation
+
+	临时支付估价单Rpovisional Payment Valuation
+
+	支付估价单Payment Valuation
+
+	数量估价单Quantity Valuation Request
+
+	数量估价申请Quantity Valuation Request
+
+	合同数量单Contract Bill Of Quantities-Boq
+
+	不祭价投标数量单Unpriced Tender Boq
+
+	标价投标数量单Priced Tender Boq
+
+	询价单Enquiry
+
+	临时支付申请 Interim Application For Payment
+
+	支付协议Agreement To Pay
+
+	意向书Letter Of Intent
+
+	订单Order
+
+	总订单Blanket Order
+
+	现货订单Sport Order
+
+	租赁单Lease Order
+
+	紧急订单Rush Order
+
+	修理单Repair Order
+
+	分订单Call Off Order
+
+	寄售单Consignment Order
+
+	样品订单Sample Order
+
+	换货单Swap Order
+
+	订购单变更请求Purchase Order Change Request
+
+	订购单回复 Purchase Order Response
+
+	租用单Hire Order
+
+	备件订单 !Spare Parts Order
+
+	交货说明 Delivery Instructions
+
+	交货计划表Delivery Schedule
+
+	按时交货Delivery Just-In-Time
+
+	发货通知Delivery Release
+
+	交货通知Delivery Note
+
+	装箱单Packing List
+
+	发盘／报价Offer／Quotation
+
+	报价申请Request For Quote
+
+	合同Contract
+
+	订单确认Acknowledgement Of Order
+
+	形式发票Proforma Invoice
+
+	部分发票Partial Invoice
+
+	操作说明Operating Instructions
+
+	铭牌Name／Product Plate
+
+	交货说明请求Request For Delivery Instructions
+
+	订舱申请 Booking Request
+
+	装运说明Shipping Instructions
+
+	托运人说明书(空运)Shipper's Letter Of Instructions(Air)
+
+	短途货运单 Cartage Order(Local Transport)
+
+	待运通知Ready For Despatch Advice
+
+	发运单 Despatch Order
+
+	发运通知Despatch Advice
+
+	单证分发通知Advice Of Distrbution Of Document．
+
+	商业发票Commercial Invoice
+
+	贷记单Credit Note
+
+	佣金单Commission Note
+
+	借记单Debit Note
+
+	更正发票Corrected Invoice
+
+	合并发票Consolidated Invoice
+
+	预付发票Prepayment Invoice
+
+	租用发票Hire Invoice
+
+	税务发票Tax Invoice
+
+	自用发票Self-Billed i! Nvoice
+
+	保兑发票Delcredere Invoice
+
+	代理发票Factored Invoice
+
+	租赁发票Lease Invoice
+
+	寄售发票Consignment Invoice
+
+	代理贷记单Factored Credit Note
+
+	银行转帐指示Instructions For Bank Transfer
+
+	银行汇票申请书Application For Banker's Draft
+
+	托收支付通知书 Collection Payment Advice
+
+	跟单信用证支付通知书Document．Ry Credit Payment Advice
+
+	跟单信用证承兑通知书 Document．Ry Credit Acceptance Advice
+
+	跟单信用证议付通知书 Document．Ry Credit Negotiation Advice
+
+	银行担保申请书Application For Banker's Guarantee
+
+	银行担保Banker's Guarantee
+
+	跟单信用证赔偿单Document．Ry Credit Letter Of Indemnity
+
+	信用证预先通知书Preadvice Of a Credit
+
+	托收单 Collection Order
+
+	单证提交单Document． Presentation Form
+
+	付款单Payment Order
+
+	扩展付款单Extended Payment Order
+
+	多重付款单Multiple Payment Order
+
+	贷记通知书Credit Advice
+
+	扩展贷记通知书Extended Credit Advice
+
+	借记通知书Debit Advice
+
+	借记撤消 Reversal Of Debit
+
+	贷记撤消Reversal Of ! Credit
+
+	跟单信用证申请书Document．Ry Credit Application
+
+	跟单信用证Document．Ry Credit
+
+	跟单信用证通知书Document．Ry Credit Notification
+
+	跟单信用证转让通知Document．Ry Credit Transfer Advice
+
+	跟单信用证更改通知书Document．Ry Credit Amendment Notification
+
+	跟单信用证更改单Document．Ry Credit Amendment
+
+	汇款通知Remittance Advice
+
+	银行汇票Banker's Draft
+
+	汇票 Bill Of Exchange
+
+	本票Promissory Note
+
+	账户财务报表Financial Statement Of Account
+
+	账户报表报文Statement Of Account Message
+
+	保险赁证 Insurance Certificate
+
+	保险单Insurance Policy
+
+	保险申报单(明细表) Insurance Declaration Sheet (Bordereau)
+
+	保险人发票 Insurer's Invoice
+
+	承保单Cover Note
+
+	货运说明Forwarding Instructions
+
+	货运代理给进口代理的通知Forwarder's Advice To Import Agent
+
+	货运代理给出口商的通知Forwarder's Advice To Exporter
+
+	货运代理发票Forwarder's Invoice
+
+	货运代理收据证明 Forwarder's Certificate Of Receipt
+
+	托运单 Shipping Note
+
+	货运代理人仓库收据Forwarder's Warehouse Receipt
+
+	货物收据Goods Receipt
+
+	港口费用单 p! Ort Charges Document．
+
+	入库单Warehouse Warrant
+
+	提货单Delivery Order
+
+	装卸单Handling Order
+
+	通行证Gate Pass
+
+	运单Waybill
+
+	通用(多用)运输单证Universal (Multipurpose) Transport Document．
+
+	承运人货物收据Goods Receipt, Carriage
+
+	全程运单House Waybill
+
+	主提单 Master Bill Of Lading
+
+	提单Bill Of Lading
+
+	正本提单 Bill Of Lading Original
+
+	副本提单Bill Of Lading Copy
+
+	空集装箱提单Empty Container Bill
+
+	油轮提单Tanker Bill Of Lading
+
+	海运单Sea Waybill
+
+	内河提单Inland Waterway Bill Of Lading
+
+	不可转让的海运单证(通用) Non-Negotiable Maritime
+
+	大副据Mate's Receipt
+
+	全程提单House Bill Of Lading
+
+	无提单提货保函Letter Of Indemnity For Non-Surrender Of Bill Of Lading
+
+	货运代理人提单Forwarder's Bill Of Lading
+
+	铁路托运单(通用条款) Rail Consignment Note (Generic Term)
+
+	陆运单Road List-Smgs
+
+	押运正式确认Escort Official Recognition
+
+	分段计费单证Recharging Document．
+
+	公路托运单 Road Cosignment Not! e
+
+	空运单Air Waybill
+
+	主空运单Master Air Waybill
+
+	分空运单Sub Stitute Air Waybill
+
+	国人员物品申报Crew's Effects Declaration
+
+	乘客名单Passenger List
+
+	铁路运输交货通知Delivery Notice(Rail Transport)
+
+	邮递包裹投递单Despatch Note (Post Parcels)
+
+	多式联运单证(通用) Multimodal／Combined Transport Document．Nbsp(Generic)
+
+	直达提单Through Bill Of Lading
+
+	货运代理人运输证书Forwarder's Certificate Of Transport
+
+	联运单证(通用) Combined Transport Document．Nbsp(Generic)
+
+	多式联运单证(通用) Multimodal Transport Document．Nbsp(Generic)
+
+	多式联运提单Combined Transport Bill Of Lading／Multimoda Bill Of Lading
+
+	订舱确认Booking Confirmation
+
+	要求交货通知Calling Foward Notice
+
+	运费发票 Freight Invoice
+
+	货物到达通知Arrival Notice(Goods)
+
+	无法交货的通知Notice Of Circumstances Preventing Delvery (Goods)
+
+	无法运货通知Notice Of Circumstances Preventing Transport (Goods)
+
+	交货通知 Delivery Notice (Goods)
+
+	载货清单Cargo Manifest
+
+	载货运费清单Freight Manifest
+
+	公路运输货物清单Bordereau
+
+	集装箱载货清单Cont! Ainer Manifes (Unit Packing List)
+
+	铁路费用单Charges Note
+
+	托收通知Advice Of Collection
+
+	船舶安全证书 Safety Of Ship Certificate
+
+	无线电台安全证书Safety Of Radio Certificate
+
+	设备安全证书Safety Of Equipment Certificate
+
+	油污民事责任书 Civil Liability For Oil Certificate
+
+	载重线证书Loadline Document．
+
+	免于除鼠证书Derat Document．
+
+	航海健康证书 Maritime Declaration Of Health
+
+	船舶登记证书Certificate Of Registry
+
+	船用物品申报单Ship's Stores Declaration
+
+	出口许可证申请表 Export Licence, Application
+
+	出口许可证 Export Licence
+
+	出口结汇核销单 Exchange Control Declaration, Exprot
+
+	t出口单证(海关转运报关单)(欧共体用) Despatch Note Moder t
+
+	t1出口单证(内部转运报关单)(欧共体用) Despatch Note Model t1
+
+	t2出口单证(原产地证明书) Despatch Note Model t2
+
+	t5管理单证(退运单证)(欧共体用) Control Document．Nbspt5
+
+	铁路运输退运单Re-Sending Consigment Note
+
+	t2l出口单证(原产地证明书)(欧共体用) Despatch Note Model t2l
+
+	出口货物报关单Goods Declaration For Exportation
+
+	离港货物报关单Cargo Declaration(Departure)
+
+	货物监管证书申请表Goods Control Certificate
+
+	植物检疫申请表Application For Phytosanitary Certificate
+
+	植物检疫证书Phytosanilary Certificate
+
+	卫生检疫证书Sanitary Certificate
+
+	动物检疫证书Veterinary Certifieate
+
+	商品检验申请表Application For Inspection Certificate
+
+	商品检验证书Inspection Certificate
+
+	原产地证书申请表Certificate Of Origin, Application For
+
+	原产地证书Certificate Of Origin
+
+	原产地申明Declaration Of Origin
+
+	地区名称证书Regional Appellation Certificate
+
+	优惠原产地证书Preference Certificate Of Origin
+
+	普惠制原产地证书Certificate Of Origin Form GSP
+
+	领事发票Cosular Invoice
+
+	危险货物申报单Dangerous Goods Declaration
+
+	出口统计报表Statistical Doucument, Export
+
+	国际贸易统计申报单Intrastat Declaration
+
+	交货核对证明Delivery Verification Certificate
+
+	进口许可证申请表Import Licence, Application For
+
+	进口许可证Import Licence
+
+	无商业细节的报关单Customs Decl! Aration Without Commercial Detail
+
+	有商业和项目细节的报关单Customs Declaration With Commercial And Item Detail
+
+	无项目细节的报关单Customs Declaration Without Item Detail
+
+	有关单证Related Document．
+
+	海关收据Receipt (Customs)
+
+	调汇申请Application For Exchange Allocation
+
+	调汇许可Foreign Exchange Permit
+
+	进口外汇管理申报Exchange Control Declaration (Import)
+
+	进口货物报关单Goods Declaration For Implortation
+
+	内销货物报关单Goods Declaration For Home Use
+
+	海关即刻放行报关单Customs Immediate Release Declaration
+
+	海关放行通知Customs Delivery Note
+
+	到港货物报关单Cargo Declaration (Arrival)
+
+	货物价值申报清单Value Declaration
+
+	海关发票Customs Invoice
+
+	邮包报关单Customs Deciaration (Post Parcels)
+
+	增值税申报单Tax Declaration (Value Added Tax)
+
+	普通税申报单Tax Declaration (General)
+
+	催税单Tax Demand
+
+	禁运货物许可证 Embargo Permit
+
+	海关转运货物报关单Goods Declaration For Customs Transit
+
+	Tif国际铁路运输报关单 Tif Form
+
+	Tir国际公! 路运输报关单Tir Carnet
+
+	欧共体海关转运报关单Ec Carnet
+
+	欧共体Eur1产地证?Þeur 1 Certificate Of Origin
+
+	暂准进口海关文件Ata Carnt
+
+	欧共体统一单证 Single Administrative Document．
+
+	海关一般回复General Response (Customs)
+
+	海关公文回复 Document．Nbspresponse (Customs)
+
+	海关误差回复 Error Response (Customs)
+
+	海关一揽子回复Packae Response (Customs)
+
+	海关计税／确认回复Tax Calculation ／Confirmation Response (Customs)
+
+	配额预分配证书Quota Prior Allocation Certificate
+
+	最终使用授权书End Use Authorization
+
+	政府合同Government Contract
+
+	进口统计报表Statistical Document.Import
+
+	跟单信用证开证申请书Application For Document．Ry Credit
+
+	先前海关文件／报文Previous Customs Document．Message
+
+	一般贸易Ordinary Trade
+
+	易货贸易Barter Trade（国家之间不通过货币媒介直接交换货物）
+
+	补偿贸易Compensation Trade （利用外资进口国外技术或设备,用产品偿还）
+
+	协议贸易Agreement Trade （根据各国政府间签订的贸易协议和清算协议进行的贸易）
+
+	进料加工Processing With Imported Materials （进口原材料、零部件，加工成品后再出口 ）
+
+	来料加工Processing With Customer's Materials （由国外厂商提供原材料、零部件，由国内厂商按外商要求加工装配，成品交外商销售，加工方收工缴费）
+
+	出料加工Outward Processing （由国内厂商提供原材料、零部件，国外厂商按要求加工装配，成品返销，加工方收取工缴费 ）
+
+	寄售贸易Consignment Trade （寄售人氢货物运到国外,委托代销人销售 ）
+
+	国际租赁International Lease （根据国际租赁契约，出租人将设备租凭给他国承租人使用
+
+	边境贸易Frontier Trade （边境城镇与接壤国家边境城镇之间及边民互市贸易）
+
+	转口贸易Entrepot Trade （经过转口国进行的进出口贸易）
+
+	许可贸易License Trade （商标、专利技术、专有技术以许可协议形式进行的贸易 ）
+
+	期货贸易Forward Trade （通过国际期货市场进行远期商品买卖 ）
+
+	承包工程Contract Project （承包国外工程技术项目或劳务项目的进出口设备和货物 ）
+
+	国际招标International Bid （通过国际招标形式进行的一种进出口贸易）
+
+	国际展览International Exhibition （通过国际展览会和国际博览会等形式进出口货物 ）
+
+	国际拍卖International Exhibition （通过国际拍卖进行的一种贸易）
+</note>

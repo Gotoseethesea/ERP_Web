@@ -1,0 +1,157 @@
+﻿@page "/hr/recruitment/candidate"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AntDesign.TableModels
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+
+<h3>候选人管理</h3>
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="面试状态">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择状态"
+                        @bind-Value="@StatusFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    <SelectOption TItemValue="int?" TItem="int?" Value="null" Label="全部" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="0" Label="初筛" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="1" Label="一面" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="2" Label="二面" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="3" Label="已发Offer" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="4" Label="已入职" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="5" Label="已淘汰" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="应聘职位">
+                <Input @bind-Value="@PositionFilter" Placeholder="请输入职位名称" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="工作经验">
+                <Input @bind-Value="@WorkYearFilter" Placeholder="最低工作年限" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="关键字">
+                <Input @bind-Value="@Keyword" Placeholder="姓名/手机号/邮箱" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" HtmlType="button">
+                搜索
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<Table DataSource="@data" TItem="Candidate" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+       Resizable
+       HidePagination Bordered
+       ScrollX="1800" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => c.Code" Title="编号" Width="120" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.Name" Title="姓名" Width="100" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.ApplyPosition" Title="应聘职位" Width="150" />
+    <PropertyColumn Property="c => c.Phone" Title="手机号" Width="120" />
+    <PropertyColumn Property="c => c.Email" Title="邮箱" Width="180" />
+    <PropertyColumn Property="c => c.WorkYears" Title="工作年限" Width="100" Align="ColumnAlign.Right" />
+    <PropertyColumn Property="c => c.Education" Title="学历" Width="100" />
+    <PropertyColumn Property="c => c.ExpectedSalary" Title="期望薪资" Width="120" Align="ColumnAlign.Right">
+        @row.ExpectedSalary.ToString("C0")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InterviewStatus" Title="面试状态" Width="100">
+        <Tag Color="@(row.InterviewStatus switch {
+            <3 => "orange",
+            3 => "blue",
+            4 => "green",
+            5 => "red",
+            _ => "default"
+        })">
+            @row.GetInterviewStatusDisplayName()
+        </Tag>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.RecruitmentPlan" Title="关联招聘计划" Width="150">
+        @row.RecruitmentPlan?.Position ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InsertTime" Title="创建时间" Width="160" />
+
+    <ActionColumn Title="操作" Width="200" Fixed="ColumnFixPlacement.Right">
+        <Space Size="SpaceSize.Small">
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">编辑</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">安排面试</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small" Danger>淘汰</Button>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    int? StatusFilter;
+    int? WorkYearFilter;
+    string PositionFilter;
+    string Keyword;
+    Candidate FilterModel = new Candidate();
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    List<Candidate> data = new List<Candidate>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    public async Task Refresh()
+    {
+        try
+        {
+            SqlClient SSC = new SqlClient();
+            var query = SSC.Db.Queryable<Candidate>()
+                .Includes(c => c.RecruitmentPlan)
+                .Where(c => c.Active);
+
+            // 状态筛选
+            if (StatusFilter.HasValue)
+            {
+                query = query.Where(c => c.InterviewStatus == StatusFilter.Value);
+            }
+
+            // 工作年限筛选
+            if (WorkYearFilter.HasValue)
+            {
+                query = query.Where(c => c.WorkYears >= WorkYearFilter.Value);
+            }
+
+            // 职位筛选
+            if (!string.IsNullOrEmpty(PositionFilter))
+            {
+                query = query.Where(c => c.ApplyPosition.Contains(PositionFilter));
+            }
+
+            // 关键字筛选
+            if (!string.IsNullOrEmpty(Keyword))
+            {
+                query = query.Where(c => c.Name.Contains(Keyword) || c.Phone.Contains(Keyword) || c.Email.Contains(Keyword));
+            }
+
+            data = await query.OrderByDescending(c => c.InsertTime).ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询候选人失败：{ex.Message}");
+            data = new List<Candidate>();
+        }
+    }
+}

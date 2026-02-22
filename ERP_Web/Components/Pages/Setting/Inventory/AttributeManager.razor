@@ -1,0 +1,150 @@
+﻿@using ERP_Web.Models
+
+@if (string.IsNullOrEmpty(InvCode))
+{
+    <Alert Message="请先在存货档案列表中选择一个商品" Type="AlertType.Info" ShowIcon ="true" />
+}
+else
+{
+    <Card Title="@($"商品属性管理 - {InvCode}")">
+        <Button Type="ButtonType.Primary" OnClick="ShowAddAttrDialog" Style="margin-bottom:16px">
+            <Icon Type="plus" /> 添加属性
+        </Button>
+        <Button Type="ButtonType.Primary" OnClick="SaveAttr" Style="margin-bottom:16px">
+            <Icon Type="plus" /> 保存
+        </Button>
+        <Table @ref="dataTable" DataSource="@attributes" TItem="InvAttribute" Loading="@loading" Context="row">
+            <ColumnDefinitions>
+                <PropertyColumn Property="c => c.Id" />
+                <PropertyColumn Property="c => c.InvCode"/>
+                <PropertyColumn Property="c => c.Attribute">
+                    <Input @bind-Value="@row.Attribute">
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Active" />
+                <ActionColumn>
+                    <Button OnClick="() => AddOption(row)">增加选项</Button>
+                </ActionColumn>
+            </ColumnDefinitions>
+            <ExpandTemplate Context="attr">
+                <AttributeOptionsTable @ref="attributeOptionsTable" AttributeId="@attr.Data.Id"
+                                      OnOptionUpdated="HandleOptionUpdated" />
+            </ExpandTemplate>
+        </Table>
+    </Card>
+    @*     <AttributeEditDialog @ref="attrEditDialog"
+                        OnSave="HandleAttrSaved" />
+    
+    <AttributeOptionEditDialog @ref="optionEditDialog" 
+                              OnSave="HandleOptionSaved" /> *@
+}
+
+@code {
+    [Parameter]
+    public string InvCode { get; set; }
+
+    [Parameter]
+    public EventCallback OnAttributeUpdated { get; set; }
+
+    private AttributeEditDialog attrEditDialog;
+    //private AttributeOptionEditDialog optionEditDialog;
+    private AttributeOptionsTable attributeOptionsTable;
+    private Table<InvAttribute> dataTable;
+
+    private List<InvAttribute> attributes = new();
+    private bool loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(InvCode))
+        {
+            await LoadAttributes();
+        }
+    }
+
+    private async Task LoadAttributes()
+    {
+        loading = true;
+        StateHasChanged();
+
+        try
+        {
+            attributes = InvAttribute.GetByInvCode(InvCode);
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowAddAttrDialog()
+    {
+        var add = new InvAttribute()
+        {
+            InvCode = InvCode,
+            Attribute = "请编辑",
+            Options = new List<InvAttributeOption>()
+            {
+                new InvAttributeOption(){Value = "请编辑"}
+            }
+        };
+        attributes.Add(add);
+        dataTable.ReloadData();
+        //attrEditDialog.Show(new InvAttribute { InvCode = InvCode });
+    }
+
+    private void ShowEditAttrDialog(InvAttribute attr)
+    {
+        attrEditDialog.Show(attr);
+    }
+
+    private void ShowAddOptionDialog(InvAttribute attr)
+    {
+        //optionEditDialog.Show(new InvAttributeOption { AttributeId = attr.Id });
+    }
+
+    private async Task SaveAttr()
+    {
+        //await AttributeService.Delete(attr.Id);
+        foreach (var item in attributes)
+        {
+            item.Insert();
+        }
+        await LoadAttributes();
+        //OnAttributeUpdated?.InvokeAsync();
+    }
+
+    private async Task DeleteAttr(InvAttribute attr)
+    {
+        //await AttributeService.Delete(attr.Id);
+        await LoadAttributes();
+        //OnAttributeUpdated?.InvokeAsync();
+    }
+
+    private void AddOption(InvAttribute value)
+    {
+        //value.Options.Add(new InvAttributeOption() { AttributeId = value.Id, Value = "请编辑" });
+        var InvAttributeOption = new InvAttributeOption() { AttributeId = value.Id, Value = "请编辑" };
+        InvAttributeOption.Insert();
+        LoadAttributes();
+        dataTable.ReloadData();
+        StateHasChanged();
+    }
+
+    private async Task HandleAttrSaved()
+    {
+        await LoadAttributes();
+        //OnAttributeUpdated?.InvokeAsync();
+    }
+    
+    private async Task HandleOptionSaved()
+    {
+        await LoadAttributes();
+        //OnAttributeUpdated?.InvokeAsync();
+    }
+    
+    private void HandleOptionUpdated()
+    {
+        StateHasChanged();
+    }
+}

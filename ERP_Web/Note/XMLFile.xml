@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<notes>
+	<SysModels>
+		1.完成存货档案的新增 2026-2-25
+		后续需要优化采购单的增加
+
+
+		系统名称	通用简写	完整英文全称	说明与补充
+		进销存系统	PSI
+		Purchase-Sales-Inventory System	最主流、对应"进销存"三个核心模块的通用缩写，全流程场景通用，行业辨识度最高
+		部分侧重库存/销售的场景也会用ISMS（Inventory and Sales Management System）
+
+
+		采购系统	PMS
+		Procurement Management System	完整采购管理系统的标准缩写
+		部分场景也会用PRS（Procurement System），如果仅指采购订单模块可用PO（Purchase Order）
+
+
+		库存系统	IMS
+		Inventory Management System	侧重库存台账、出入库、盘点等库存数据管理的通用缩写
+		⚠️ 注意和WMS（Warehouse Management System，仓储管理系统，侧重仓库现场作业、库位/拣货等执行层流程）区分
+
+		销售系统	SMS
+
+		Sales Management System	销售全流程管理的标准缩写
+		如果侧重销售订单流转场景也会用OMS（Order Management System，订单管理系统）
+
+		资产管理系统	EAM
+		Enterprise Asset Management	企业级高价值资产（设备、厂房、车辆、无形资产等）全生命周期管理的标准缩写，覆盖资产台账、运维计划、故障追溯、效能分析、折旧核算全流程
+		重资产行业（制造、基建、能源、交通）通用，轻量化运维场景也会用CMMS（Computerized Maintenance Management System，计算机化维护管理系统）
+
+		财务系统	FMS
+		Financial Management System	专业财务管理系统的通用缩写，比ERP自带的基础财务模块覆盖更深，包含总账核算、预算管控、资金池管理、成本分析、税务合规、多准则报表生成等功能
+		集团企业、上市公司核心业务系统，部分场景也会用FS（Financial System）作为简化缩写
+
+		工程能耗管理系统	EMS	Energy Management System	面向工业工程、工厂、园区、建筑的能耗（水、电、气、热等）全流程管理标准缩写，覆盖能耗数据采集、实时监测、能效分析、节能优化、碳排放核算等功能
+		高能耗行业通用，侧重建筑场景时也会用BEMS（Building Energy Management System，建筑能耗管理系统）作为细分领域缩写
+
+
+	</SysModels>
+
+	<user>
+		集成获取cookie中的用户信息，提供统一的IUserContext接口供全系统调用，简化代码并提升性能：
+		使用方式（完全兼容现有代码，零修改原有逻辑）
+		场景1：实体类/服务层调用（如你之前的Check/Withdraw方法）
+		直接用原来的静态调用方式即可，不需要修改任何原有代码：
+
+		// 原有代码直接生效
+		var currentUser = UserContext.Current;
+		场景2：页面组件调用
+		页面组件只要继承AppComponentBase，直接用CurrentUser即可，无需任何注入/查询代码：
+
+		@page "/PrView/{Text?}"
+		@inherits AppComponentBase <!-- 只需加这一行 -->
+
+		<!-- 直接使用CurrentUser -->
+		<div>当前登录用户：@CurrentUser?.Name</div>
+
+		@code{
+			private async Task ApproveAction()
+			{
+			// 直接用CurrentUser，不用再注入/查询
+				var result = Pr.Check(CurrentUser, "同意");
+			}
+		}
+		场景3：自定义服务调用
+		构造函数注入IUserContext即可：
+
+		public class PurchaseOrderService
+		{
+			private readonly IUserContext _userContext;
+
+			public PurchaseOrderService(IUserContext userContext)
+			{
+				_userContext = userContext;
+			}
+
+			public void CreateOrder()
+			{
+				var createUser = _userContext.CurrentUser;
+			// ...业务逻辑
+			}
+		}
+	</user>
+</notes>

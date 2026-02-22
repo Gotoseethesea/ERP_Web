@@ -1,0 +1,286 @@
+﻿@page "/sales/products"
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using AntDesign
+@inject MessageService MessageService
+@inject ModalService ModalService
+@inject NavigationManager NavigationManager
+
+
+<PageHeader Title="商品选择" SubTitle="浏览并选择商品加入购物车"> </PageHeader>
+<Space>
+    <Button Type="ButtonType.Primary" Icon="shopping-cart" OnClick="ViewCart">查看购物车 (@cartItems.Count)</Button>
+    <Button Type="ButtonType.Dashed" Icon="sync" OnClick="RefreshProducts">刷新商品</Button>
+</Space>
+
+<Row Gutter="16">
+    <!-- 商品列表 -->
+    <Col Span="6">
+        <Card Title="商品分类" Style="height: 80vh; overflow-y: auto;">
+            <Tree DataSource="@categories" TItem="Category" OnClick="OnCategorySelected" ShowLine BlockNode>
+                <TitleTemplate Context="node">
+                    <Icon Type="@(node.IsLeaf ? "appstore" : "folder")" />
+                    <span>@node.DataItem.Name</span>
+                </TitleTemplate>
+            </Tree>
+        </Card>
+    </Col>
+
+    <!-- 商品展示 -->
+    <Col Span="18">
+        <Card Title="商品列表" Style="height: 80vh; overflow-y: auto;">
+            <Row Gutter="16">
+                @foreach (var product in filteredProducts)
+                {
+                    <Card Title="@product.Name" Hoverable Style="margin-bottom: 16px; cursor: pointer;">
+                        <Cover>
+                            <img src="@(product.Image ?? "images/default-product.png")" alt="@product.Name" style="height: 160px; width:160px; object-fit: cover;" />
+                        </Cover>
+                        <Body>
+                            <CardMeta Title="@product.Name" Description="@product.Name">
+                            </CardMeta>
+                            <div style="padding: 12px;">
+                                <Tag Color="TagColor.Red">¥ @product.Specifications.FirstOrDefault()?.Options.FirstOrDefault()?.Price</Tag>
+                                <div style="margin-top: 8px;">
+                                    <ButtonGroup>
+                                        <Space>
+                                            <Button Type="ButtonType.Primary" Size="ButtonSize.Small" Block
+                                                    OnClick="@(() => NavigateToDetail(product))">
+                                                详情
+                                            </Button>
+                                            <Button Type="ButtonType.Primary" Size="ButtonSize.Small" Block
+                                                    OnClick="@(e => ShowSpecSelector(product, e))">
+                                                购物车
+                                            </Button>
+                                        </Space>
+                                    </ButtonGroup>
+                                </div>
+                            </div>
+                        </Body>
+
+                    </Card>
+                }
+            </Row>
+        </Card>
+    </Col>
+</Row>
+
+
+@code {
+        // 数据模型
+    private List<InventoryItem> allProducts = new();
+    private List<InventoryItem> filteredProducts = new();
+    private List<Category> categories = new();
+    // private Tree<TreeDataItem<string>> categoryTree;
+    private ModalRef? specModal;
+    private ModalRef? cartModal;
+
+    // 当前选择状态
+    private InventoryItem? selectedProduct = null;
+    private Dictionary<int, int> selectedOptions = new(); // attributeId -> optionId
+    private int quantity = 1;
+
+    // 购物车
+    private List<CartItem> cartItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProducts();
+        BuildCategoryTree();
+    }
+
+    private async Task LoadProducts()
+    {
+        allProducts = InventoryItem.Select();
+
+        allProducts = allProducts.Where(x=>x.CategoryCode == "01").ToList();
+        categories = Category.Select();
+        filteredProducts = allProducts;
+    }
+
+    private void BuildCategoryTree()
+    {
+        // 示例数据，实际应从数据库获取
+        categories = Category.Select();
+    }
+
+    // 分类选择
+    private void OnCategorySelected(TreeEventArgs<Category> args)
+    {
+        if (args.Node.IsLeaf)
+        {
+            var categoryCode = args.Node.DataItem.Code;
+            filteredProducts = allProducts
+                .Where(p => p.CategoryCode == categoryCode)
+                .ToList();
+        }
+        else
+        {
+            filteredProducts = allProducts;
+        }
+    }
+
+    // 显示商品详情
+    private void ShowProductDetail(InventoryItem product)
+    {
+        // 实际项目中可以打开详情页
+        MessageService.Info($"查看商品: {product.Name}");
+    }
+
+    // 显示规格选择器
+    private void ShowSpecSelector(InventoryItem product, MouseEventArgs e)
+    {
+        selectedProduct = product;
+        selectedOptions.Clear();
+
+        // // 初始化默认选项
+        // foreach (var attr in product.Attributes)
+        // {
+        //     if (attr.Options.Any())
+        //     {
+        //         selectedOptions[attr.Id] = attr.Options.First().Id;
+        //     }
+        // }
+
+        // quantity = 1;
+
+        // specModal = ModalService.CreateModal(new ModalOptions
+        // {
+        //     Title = $"选择规格 - {product.Name}",
+        //     Width = "800px",
+        //     OnOk = AddToCart
+        // });
+
+        //e.StopPropagation(); // 防止触发商品卡片点击事件
+    }
+
+    // 计算总价
+    private decimal CalculateTotalPrice()
+    {
+        if (selectedProduct == null) return 0;
+
+        decimal basePrice = selectedProduct.Specifications.FirstOrDefault()?.Options.FirstOrDefault()?.Price ?? 0;
+        decimal optionsPrice = 0;
+
+        foreach (var optionId in selectedOptions.Values)
+        {
+            var option = selectedProduct.Attributes
+                .SelectMany(a => a.Options)
+                .FirstOrDefault(o => o.Id == optionId);
+
+            if (option != null)
+            {
+                //optionsPrice += option.Price;
+            }
+        }
+
+        return (basePrice + optionsPrice) * quantity;
+    }
+
+    // 加入购物车
+    private async Task AddToCart()
+    {
+        if (selectedProduct == null) return;
+
+        // 获取选中的规格选项
+        // var selectedOptionObjects = new List<InvAttributeOption>();
+        // foreach (var optionId in selectedOptions.Values)
+        // {
+        //     var option = selectedProduct.Attributes
+        //         .SelectMany(a => a.Options)
+        //         .FirstOrDefault(o => o.Id == optionId);
+
+        //     if (option != null)
+        //     {
+        //         selectedOptionObjects.Add(option);
+        //     }
+        // }
+
+        // // 创建购物车项
+        // var cartItem = new CartItem
+        // {
+        //     Product = selectedProduct,
+        //     SelectedOptions = selectedOptionObjects,
+        //     Quantity = quantity,
+        //     Price = CalculateTotalPrice() / quantity // 计算单价
+        // };
+
+        // cartItems.Add(cartItem);
+        // await MessageService.Success($"已添加 {selectedProduct.Name} 到购物车");
+
+        //CloseSpecModal();
+    }
+
+    // 查看购物车
+    private void ViewCart()
+    {
+        // cartModal = ModalService.CreateModal(new ModalOptions
+        // {
+        //     Title = "购物车",
+        //     Width = "1000px",
+        //     OnOk = Checkout
+        // });
+    }
+
+    // 更新购物车数量
+    private void UpdateQuantity(CartItem item, int newQuantity)
+    {
+        item.Quantity = newQuantity;
+    }
+
+    // 移除购物车项
+    private void RemoveFromCart(CartItem item)
+    {
+        cartItems.Remove(item);
+    }
+
+    // 结算
+    private async Task Checkout()
+    {
+        // if (!cartItems.Any())
+        // {
+        //     await MessageService.Warning("购物车为空");
+        //     return;
+        // }
+
+        // // 实际项目中应跳转到结算页面
+        // await MessageService.Success($"结算成功! 共 {cartItems.Sum(i => i.Quantity)} 件商品，总价 ¥{cartItems.Sum(i => i.Price * i.Quantity)}");
+        // cartItems.Clear();
+        // CloseCartModal();
+    }
+
+    // 关闭模态框
+    private void CloseSpecModal()
+    {
+        //specModal.
+    }
+    private void CloseCartModal()
+    {
+        //specModal.    => cartModal?.Destroy();
+
+    }
+
+    // 刷新商品
+    private async Task RefreshProducts()
+    {
+        await LoadProducts();
+        MessageService.Info("商品列表已刷新");
+    }
+
+    private void NavigateToDetail(InventoryItem product)
+    {
+        // 跳转到商品详情页，传递商品ID作为参数
+        NavigationManager.NavigateTo($"/product-detail/{product.Code}");
+    }
+
+
+    // 购物车项模型
+    public class CartItem
+    {
+        public InventoryItem Product { get; set; }
+        public List<InvAttributeOption> SelectedOptions { get; set; } = new();
+        public int Quantity { get; set; } = 1;
+        public decimal Price { get; set; }
+    }
+}
+

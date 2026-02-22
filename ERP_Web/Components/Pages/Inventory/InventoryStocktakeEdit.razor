@@ -1,0 +1,312 @@
+﻿@page "/inventory-stocktake/edit/{StocktakeCode}"
+@rendermode InteractiveServer
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using System.Transactions
+@using SqlSugar
+@inject IMessageService _message
+@inject NavigationManager NavManager
+@inject IJSRuntime JSRuntime
+@inject ModalService _modalService
+
+
+
+<PageHeader Title="录入实盘数量" SubTitle="@($"盘点单号：{StocktakeCode}")"> </PageHeader>
+    <Breadcrumb>
+        <BreadcrumbItem>库存管理</BreadcrumbItem>
+        <BreadcrumbItem Href="/inventory-stocktake">库存盘点</BreadcrumbItem>
+        <BreadcrumbItem>录入实盘</BreadcrumbItem>
+    </Breadcrumb>
+    <Button OnClick="NavigateToBack">返回列表</Button>
+    <Button Type="ButtonType.Primary" OnClick="SaveDetail" Style="margin-left: 8px;" Loading="@_saving">
+        <Icon Type="save" /> 保存实盘数据
+    </Button>
+
+<Button OnClick="NavigateToBack">返回列表</Button>
+<!-- 新增：保存按钮 -->
+<Button Type="ButtonType.Primary"
+        OnClick="SaveDetail"
+        Style="margin-left: 8px;"
+        Loading="@_saving"
+        Disabled="@(_currentStocktake?.Status == StocktakeStatus.Adjusted)">
+    <Icon Type="save" /> 保存实盘数据
+</Button>
+<!-- 🔴 新增：生成调整单按钮，只有已盘点状态可点击 -->
+<Button Type="ButtonType.Dashed"
+        OnClick="GenerateAdjustmentOrders"
+        Style="margin-left: 8px;"
+        Loading="@_generating"
+        Disabled="@(_currentStocktake?.Status != StocktakeStatus.Counted)">
+    <Icon Type="swap" /> 生成盘盈盘亏调整单
+</Button>
+
+<Card Bordered="false" Style="margin-top: 16px;">
+    <Descriptions Column="4" Bordered="true" Style="margin-bottom: 16px;">
+        <DescriptionsItem Title="盘点单号">@_currentStocktake.Code</DescriptionsItem>
+        <DescriptionsItem Title="盘点日期">@(_currentStocktake.Date.ToString("yyyy-MM-dd") ?? "")</DescriptionsItem>
+        <DescriptionsItem Title="仓库">@_currentStocktake.Warehouse.Name</DescriptionsItem>
+        <DescriptionsItem Title="状态">@_currentStocktake.StatusText</DescriptionsItem>
+        <DescriptionsItem Title="账面总数量">@_currentStocktake.BookQuantity.ToString()</DescriptionsItem>
+        <DescriptionsItem Title="实盘总数量">@_currentStocktake.ActualQuantity.ToString()</DescriptionsItem>
+        <DescriptionsItem Title="盘盈总数量">@_currentStocktake.ProfitQuantity.ToString()</DescriptionsItem>
+        <DescriptionsItem Title="盘亏总数量">@_currentStocktake.LossQuantity.ToString()</DescriptionsItem>
+    </Descriptions>
+
+    <Alert Message="提示：请录入实际盘点数量，系统将自动计算盘盈盘亏，保存后不可修改" Type="AlertType.Info" Style="margin-bottom: 16px;" />
+
+    <Table TItem="StocktakeDetail" DataSource="@_currentDetailList" RowKey="c=>c.Id" Context="detail" PageSize="999">
+        <PropertyColumn Property="@(val => val.InvCode)" Title="商品编码" Width="120" />
+        <PropertyColumn Property="@(val => val.Inv.Name)" Title="商品名称" />
+        <PropertyColumn Property="@(val => val.SKU)" Title="规格" />
+        <PropertyColumn Property="@(val => val.Specification.Description)" Title="规格" />
+
+        <PropertyColumn Property="@(val => val.Quantity)" Title="账面数量" Width="120" Align="ColumnAlign.Right" />
+        <PropertyColumn Property="@(val => val.StockCount)" Title="实盘数量" Width="150" Align="ColumnAlign.Right">
+            <Template>
+                <Input TValue="decimal" 
+                            @bind-Value="@detail.StockCount" 
+                            Disabled="@(_currentStocktake?.Status == StocktakeStatus.Adjusted)"
+                            Style="width: 100%;" />
+            </Template>
+        </PropertyColumn>
+        <PropertyColumn Property="@(val => val.StockCount - val.Quantity)" Title="差异" Width="120" Align="ColumnAlign.Right">
+        </PropertyColumn>
+        <PropertyColumn Property="@(val => val.Price)" Title="成本价" Width="120" Align="ColumnAlign.Right" />
+        <PropertyColumn Property="@(val => (val.StockCount - val.Quantity) * val.Price)" Title="差异金额" Width="150" Align="ColumnAlign.Right">
+
+        </PropertyColumn>
+        <PropertyColumn Property="@(val => val.Note)" Title="备注">
+            <Template>
+                <Input @bind-Value="@detail.Note" Placeholder="填写差异原因" />
+            </Template>
+        </PropertyColumn>
+    </Table>
+</Card>
+
+@code {
+    [Parameter]
+    public string StocktakeCode { get; set; }
+
+    private bool _loading;
+    private bool _saving;
+    private Stocktake? _currentStocktake;
+    private List<StocktakeDetail> _currentDetailList = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        await LoadStocktakeData();
+        _loading = false;
+    }
+
+    private async Task LoadStocktakeData()
+    {
+        if (string.IsNullOrEmpty(StocktakeCode))
+        {
+            _message.Error("参数错误，未找到盘点单");
+            NavigateToBack();
+            return;
+        }
+
+        using var db = new SqlClient().Db;
+        _currentStocktake = db.Queryable<Stocktake>()
+            .Includes(x => x.Warehouse)
+            .Includes(x => x.StocktakeDetails, d => d.Inv)
+            .Includes(x => x.StocktakeDetails, d => d.Specification)
+            .First(x => x.Code == StocktakeCode && x.Active == true);
+
+        if (_currentStocktake == null)
+        {
+            _message.Error("盘点单不存在或已删除");
+            NavigateToBack();
+            return;
+        }
+
+        if (_currentStocktake.Status == StocktakeStatus.Adjusted)
+        {
+            _message.Warning("该盘点单已生成调整单，不可修改实盘数据");
+        }
+
+        _currentDetailList = _currentStocktake.StocktakeDetails.ToList();
+    }
+
+    private async void SaveDetail()
+    {
+        if (_currentStocktake?.Status == StocktakeStatus.Adjusted)
+        {
+            _message.Warning("已生成调整单的盘点单不可修改");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            using var db = new SqlClient().Db;
+            // 批量更新明细
+            db.Updateable(_currentDetailList).ExecuteCommand();
+            // 更新盘点单状态为已盘点
+            _currentStocktake.Status = StocktakeStatus.Counted;
+            db.Updateable(_currentStocktake).UpdateColumns(x => x.Status).ExecuteCommand();
+
+            _message.Success("实盘数据保存成功");
+            await Task.Delay(500);
+            NavManager.NavigateTo("/inventory-stocktake");
+        }
+        catch (Exception ex)
+        {
+            _message.Error($"保存失败：{ex.Message}");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void NavigateToBack()
+    {
+        NavManager.NavigateTo($"/inventory-stocktake");
+    }
+
+    // 原有变量不变，新增生成中状态
+    private bool _generating;
+
+    // --- 原有方法不变 ---
+
+    #region 新增：生成盘盈盘亏调整单
+    private async void GenerateAdjustmentOrders()
+    {
+        if (_currentStocktake == null || _currentStocktake.Status != StocktakeStatus.Counted)
+        {
+            _message.Warning("只有已完成实盘录入的盘点单才能生成调整单");
+            return;
+        }
+
+        // 校验是否有差异
+        if (_currentStocktake.ProfitQuantity == 0 && _currentStocktake.LossQuantity == 0)
+        {
+            _message.Info("当前盘点单无盘盈盘亏差异，无需生成调整单");
+            return;
+        }
+
+        // // 二次确认
+        // var confirm = await _modalService.ConfirmAsync(
+        //     title: "确认生成调整单",
+        //     content: $"生成后将自动创建盘盈入库单、盘亏出库单并更新库存，操作不可撤回，是否继续？",
+        //     okText: "确认生成",
+        //     cancelText: "取消",
+        //     confirmButtonProps: new ButtonProps { Danger = true });
+
+        // if (confirm != ConfirmResult.Ok) return;
+
+        _generating = true;
+        try
+        {
+           // using var scope = new TransactionScope();
+            var now = DateTime.Now;
+
+            #region 1. 生成盘盈入库单（TrxType=1 入库）
+            var profitDetails = _currentDetailList
+                .Where(d => d.DiffQuantity > 0 && d.Active == true)
+                .Select(d => new ITInvInOut
+                {
+                    Id = SnowFlakeSingle.Instance.NextId(),
+                    InvCode = d.InvCode,
+                    SKU = d.SKU,
+                    Quantity = d.DiffQuantity, // 盘盈数量
+                    Price = d.Price,
+                    Amount = d.DiffAmount,
+                    Note = $"盘点盘盈：{_currentStocktake.Code}",
+                    Active = true,
+                    InsertTime = now
+                }).ToList();
+
+            if (profitDetails.Any())
+            {
+                var profitTrx = new InventoryTransaction("")
+                {
+                    Code = $"PROFIT-{_currentStocktake.Code}", // 盘盈单号规则
+                    TrxGroupCode = "PROFIT", // 👉 替换为你系统实际的盘盈入库类型编码
+                    TrxType = 1, // 入库
+                    CompanyCode = null,
+                    Company = null,
+                    Department = null,
+                    DepartmentCode = _currentStocktake.Warehouse.DepartmentCode,
+                    WarehouseCode = _currentStocktake.WarehouseCode,
+                    Date = DateOnly.FromDateTime(_currentStocktake.Date),
+                    FiscalYear = _currentStocktake.FiscalYear.Value,
+                    Period = _currentStocktake.Period.Value,
+                    SourceDocumentCode = _currentStocktake.Code, // 关联盘点单号
+                    Note = $"盘点单[{_currentStocktake.Code}]盘盈入库",
+                    Operator = _currentStocktake.Operator,
+                    Active = true,
+                    ITInvInOuts = profitDetails
+                };
+                profitTrx.Insert(); // 复用你已有Insert方法，自动更新库存、FIFO批次
+            }
+            #endregion
+
+            #region 2. 生成盘亏出库单（TrxType=-1 出库）
+            var lossDetails = _currentDetailList
+                .Where(d => d.DiffQuantity < 0 && d.Active == true)
+                .Select(d => new ITInvInOut
+                {
+                    Id = SnowFlakeSingle.Instance.NextId(),
+                    InvCode = d.InvCode,
+                    SKU = d.SKU,
+                    Quantity = -d.DiffQuantity, // 盘亏数量取正
+                    Price = d.Price,
+                    Amount = -d.DiffAmount,
+                    Note = $"盘点盘亏：{_currentStocktake.Code}",
+                    Active = true,
+                    InsertTime = now
+                }).ToList();
+
+            if (lossDetails.Any())
+            {
+                var lossTrx = new InventoryTransaction("")
+                {
+                    Code = $"LOSS-{_currentStocktake.Code}", // 盘亏单号规则
+                    TrxGroupCode = "LOSS", // 👉 替换为你系统实际的盘亏出库类型编码
+                    TrxType = -1, // 出库
+                    CompanyCode = null,
+                    Company = null,
+                    Department = null,
+                    DepartmentCode = _currentStocktake.Warehouse.DepartmentCode,
+                    WarehouseCode = _currentStocktake.WarehouseCode,
+                    Date = DateOnly.FromDateTime(_currentStocktake.Date),
+                    FiscalYear = _currentStocktake.FiscalYear.Value,
+                    Period = _currentStocktake.Period.Value,
+                    SourceDocumentCode = _currentStocktake.Code, // 关联盘点单号
+                    Note = $"盘点单[{_currentStocktake.Code}]盘亏出库",
+                    Operator = _currentStocktake.Operator,
+                    Active = true,
+                    ITInvInOuts = lossDetails
+                };
+                lossTrx.Insert(); // 复用你已有Insert方法，自动更新库存、FIFO批次
+            }
+            #endregion
+
+            #region 3. 更新盘点单状态为已生成调整单
+            _currentStocktake.Status = StocktakeStatus.Adjusted;
+            _currentStocktake.LastUpdateTime = now;
+            _currentStocktake.Update(); // 调用你已有的Update方法
+            #endregion
+
+            //scope.Complete();
+            _message.Success($"调整单生成成功：盘盈单{profitDetails.Count}条、盘亏单{lossDetails.Count}条");
+            await Task.Delay(3000);
+            // 刷新当前页面
+            await LoadStocktakeData();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _message.Error($"调整单生成失败：{ex.Message}");
+        }
+        finally
+        {
+            _generating = false;
+        }
+    }
+    #endregion
+}

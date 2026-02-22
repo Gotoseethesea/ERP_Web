@@ -1,0 +1,55 @@
+﻿@using AntDesign
+@using ERP_Web.Models
+
+<Modal @ref="modal"
+       Title="@(currentAttr.Id == 0 ? "添加属性" : "编辑属性")"
+       OnOk="HandleOk"
+       OnCancel="Close"
+       ConfirmLoading="@saving">
+    <Form Model="@currentAttr" Layout="FormLayout.Vertical">
+        <FormItem Label="属性名称" Required>
+            <Input @bind-Value="@currentAttr.Attribute" />
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    private Modal modal;
+    private InvAttribute currentAttr = new();
+    private bool saving;
+    private bool visible;
+
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+
+    public void Show(InvAttribute attr)
+    {
+        currentAttr = attr;
+        visible = true;
+        //modal?.Open();
+    }
+
+    public void Close()
+    {
+        visible = false;
+        //modal?.Close();
+    }
+
+    private async Task HandleOk()
+    {
+        saving = true;
+        StateHasChanged();
+
+        try
+        {
+            // 触发保存事件
+            await OnSave.InvokeAsync(null);
+            Close();
+        }
+        finally
+        {
+            saving = false;
+            StateHasChanged();
+        }
+    }
+}

@@ -1,0 +1,154 @@
+﻿@using AntDesign
+@using AntDesign.TableModels
+@using ERP_Web.Models
+
+<InputGroup Compact Style="display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    height: 100%; 
+    padding: 0 10px;
+    cursor: pointer;">
+    <Select DataSource="@DataSource"
+            @bind-SelectedItem="@InternalValue"
+            EnableSearch
+            EnableVirtualization="@EnableVirtualization"
+            LabelName="@nameof(InventoryItem.Name)"
+            TItemValue="InventoryItem"
+            TItem="InventoryItem"
+            Placeholder="@Placeholder"
+            ShowArrowIcon="@ShowArrowIcon"
+            HideSelected="@HideSelected"
+            SearchDebounceMilliseconds="@SearchDebounceMilliseconds"
+            Loading="@Loading"
+            OnSearch="@(async value => await HandleSearch(value))"
+            OnSelectedItemChanged="@(async item => await HandleSelectedItemChanged(item))"
+            Style="@SelectStyle"
+            Disabled="@Disabled">
+    </Select>
+
+    <Icon Type="file-image" Theme="IconThemeType.Outline"
+          OnClick="HandleImageClick"
+          Style="font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 0 10px;
+            cursor: pointer;
+            color: #1890ff;" />
+</InputGroup>
+
+<Modal @bind-Visible="@_imageVisible" 
+       Title="商品图片" 
+       Footer="null" 
+       Width="600"
+       DestroyOnClose="true">
+    <img src="@_imageUrl" style="width: 100%; border-radius: 4px" />
+</Modal>
+
+@code {
+    #region 组件参数
+    /// <summary>
+    /// 绑定的选中存货对象
+    /// </summary>
+    [Parameter]
+    public InventoryItem Value { get; set; }
+
+    /// <summary>
+    /// 值变化回调，用于双向绑定
+    /// </summary>
+    [Parameter]
+    public EventCallback<InventoryItem> ValueChanged { get; set; }
+
+    /// <summary>
+    /// 存货数据源
+    /// </summary>
+    [Parameter]
+    public List<InventoryItem> DataSource { get; set; }
+
+    /// <summary>
+    /// 搜索加载状态
+    /// </summary>
+    [Parameter]
+    public bool Loading { get; set; }
+
+    /// <summary>
+    /// 搜索回调
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnSearch { get; set; }
+
+    /// <summary>
+    /// 选中项变化回调
+    /// </summary>
+    [Parameter]
+    public EventCallback<InventoryItem> OnSelectedItemChanged { get; set; }
+
+    #region 可选配置参数
+    [Parameter]
+    public string Placeholder { get; set; } = "输入存货名称";
+
+    [Parameter]
+    public string SelectStyle { get; set; } = "width: 100%";
+
+    [Parameter]
+    public bool EnableVirtualization { get; set; } = true;
+
+    [Parameter]
+    public int SearchDebounceMilliseconds { get; set; } = 350;
+
+    [Parameter]
+    public bool ShowArrowIcon { get; set; } = true;
+
+    [Parameter]
+    public bool HideSelected { get; set; } = true;
+
+    [Parameter]
+    public bool Disabled { get; set; } = false;
+    #endregion
+    #endregion
+
+    #region 内部状态
+    private bool _imageVisible = false;
+    private string _imageUrl;
+    private InventoryItem InternalValue
+    {
+        get => Value;
+        set
+        {
+            if (!EqualityComparer<InventoryItem>.Default.Equals(Value, value))
+            {
+                Value = value;
+                _ = ValueChanged.InvokeAsync(value);
+            }
+        }
+    }
+    #endregion
+
+    #region 内部方法
+    private async Task HandleSearch(string searchValue)
+    {
+        if (OnSearch.HasDelegate)
+        {
+            await OnSearch.InvokeAsync(searchValue);
+        }
+    }
+
+    private async Task HandleSelectedItemChanged(InventoryItem selectedItem)
+    {
+        if (OnSelectedItemChanged.HasDelegate)
+        {
+            await OnSelectedItemChanged.InvokeAsync(selectedItem);
+        }
+    }
+
+    private void HandleImageClick()
+    {
+        if (!string.IsNullOrEmpty(InternalValue?.Image))
+        {
+            _imageUrl = InternalValue.Image;
+            _imageVisible = true;
+        }
+    }
+    #endregion
+}

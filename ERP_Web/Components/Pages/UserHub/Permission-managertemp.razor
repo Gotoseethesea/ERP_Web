@@ -1,0 +1,607 @@
+﻿@page "/Pertemp"
+@using ERP_Web.Models.PrivilegeHub
+@using AntDesign
+@using ERP_Web.Repository
+@inject MessageService MessageService
+
+<PageTitle>用户权限管理</PageTitle>
+<Button OnClick="AddUser">添加用户</Button>
+
+<div class="permission-manager">
+    <Row Gutter="16">
+        <Col Span="8">
+            <Card Title="用户列表" Class="user-card">
+                <Input Placeholder="搜索用户..." AllowClear
+                       @bind-Value="@_searchText"/>
+                <AntList DataSource="@_filteredUsers" Bordered>
+                    <Header>用户列表</Header>
+                    <ChildContent Context="user">
+                        <ListItem onclick="() => SelectUser(user)">
+                            <Title>@user.Name</Title>
+                            <Avatar Style="background-color: #1890ff">@user.Name</Avatar>
+                            @user.Account
+                        </ListItem>
+                        <Tag>@user.Roles?.Count 个角色</Tag>
+                    </ChildContent>
+            </AntList>
+            </Card>
+        </Col>
+
+        <Col Span="16">
+            @if (_selectedUser != null)
+            {
+                <div class="user-permission-panel">
+                    <Card Title="@($"{_selectedUser.Name} 的权限配置")" Class="permission-card">
+                        <GridRow Justify="RowJustify.SpaceBetween" Align="RowAlign.Middle" Style="margin-bottom:24px">
+                            <GridCol>
+                                <span class="user-badge">
+                                    @if (_selectedUser != null)
+                                    {
+                                        <Avatar Size="AvatarSize.Large" Style="background-color: #1890ff">@_selectedUser?.Name</Avatar>
+                                        <div>
+                                            <h3>@_selectedUser?.Name</h3>
+                                            <span>@_selectedUser?.Account</span>
+                                        </div>
+                                        <Tag Color="TagColor.Blue">@GetInitials(_selectedUser.Name)</Tag>
+                                    }
+                                </span>
+                            </GridCol>
+                            <GridCol>
+                                <Button Type="ButtonType.Primary" OnClick="SavePermissions" Loading="@_saving">保存权限</Button>
+                            </GridCol>
+                        </GridRow>
+                        <Tabs>
+                            <TabPane Key="1" Tab="功能菜单权限">
+                                <Tree @ref="_menuTree"
+                                      TItem="TreeDataItem<AppMenu>"
+                                      DataSource="@_menuTreeData"
+                                      Checkable
+                                      BlockNode
+                                      @bind-CheckedKeys="_checkedMenuKeys"
+                                      TitleExpression="x => x.DataItem.Title"
+                                      ChildrenExpression="x => x.DataItem.Children">
+                                    <TitleTemplate>
+                                        <div style="display: flex; align-items: center;">
+                                            <span style="margin-left:8px">@context.Title</span>
+                                            <Tag Color="TagColor.Blue" Style="margin-left:8px">@context.DataItem.Title.ToString()</Tag>
+                                            @if (context.DataItem != null && !string.IsNullOrEmpty(context.DataItem.Title?.ToString()))
+                                            {
+                                                <Tag Color="TagColor.Blue" Style="margin-left:8px">@context.DataItem.Title.ToString()</Tag>
+                                            }
+                                        </div>
+                                    </TitleTemplate>
+                                </Tree>
+                            </TabPane>
+
+                            <TabPane Key="2" Tab="按钮操作权限">
+                                <div class="button-permission-grid">
+                                    @foreach (var page in _buttonPermissions)
+                                    {
+                                        <Card Title="" Class="button-card"
+                                              Style="width:100%;margin-bottom:16px">
+                                            <Row Gutter="16">
+                                                @foreach (var button in page.Buttons)
+                                                {
+                                                    <GridCol Span="6">
+                                                        <Checkbox @bind-Checked="button.IsAssigned">
+                                                            @if (!string.IsNullOrEmpty(button.Icon))
+                                                            {
+                                                                <Icon Type="@button.Icon" />
+                                                            }
+                                                            @button.DisplayText
+                                                        </Checkbox>
+                                                    </GridCol>
+                                                }
+                                            </Row>
+                                        </Card>
+                                    }
+                                </div>
+                            </TabPane>
+                        </Tabs>
+                    </Card>
+                </div>
+            }
+            else
+            {
+                <Card Title="权限配置" Class="empty-card">
+                    <Result Status="ResultStatus.Info" Title="请选择用户" SubTitle="从左侧列表中选择一个用户来配置权限">
+                        <Template>
+                            <Icon Type="user-add" Theme="IconThemeType.Outline" Style="font-size: 48px; color: #1890ff;" />
+                        </Template>
+                    </Result>
+                </Card>
+            }
+        </Col>
+    </Row>
+</div>
+
+@code{
+    // 添加树节点数据结构
+    public class TreeDataItem<T>
+    {
+        public string Key { get; set; }
+        public string Title { get; set; }
+        public string Icon { get; set; }
+        public T Data { get; set; }
+        public IEnumerable<TreeDataItem<T>> Children { get; set; }
+
+        // 扁平化树结构的方法
+        public IEnumerable<TreeDataItem<T>> Flatten()
+        {
+            yield return this;
+            if (Children != null)
+            {
+                foreach (var child in Children.SelectMany(c => c.Flatten()))
+                {
+                    yield return child;
+                }
+            }
+        }
+    }
+
+    private void AddUser()
+    {
+        var sqlClient = new SqlClient();
+        _allUsers = sqlClient.Db.Queryable<User>()
+            //.Includes(u => u.Roles)
+            .ToList();
+
+        _filteredUsers = _allUsers;
+
+
+        // 加载菜单数据
+        var menus = sqlClient.Db.Queryable<AppMenu>()
+            .Where(m => m.Active)
+            .ToList(); // 注意：这里我们获取所有菜单，然后自己构建树
+
+        // 构建根菜单（ParentId=0）
+        var rootMenus = menus.Where(m => m.ParentId == 0).ToList();
+
+        _menuTreeData = BuildTreeData(rootMenus, menus);
+
+        _selectedUser = sqlClient.Db.Queryable<User>().Where(u => u.Account == "admin").First();
+
+        LoadUserPermissions();
+
+        MessageService.Info("数据加载");
+    }
+
+}
+
+
+@code {
+    // 状态管理
+    private List<User> _allUsers = new();
+    private List<User> _filteredUsers = new();
+    private User _selectedUser;
+    private string _searchText = "";
+    private bool _saving = false;
+    
+    // 菜单树数据
+    //private Tree<AppMenu> _menuTree;
+    private Tree<TreeDataItem<AppMenu>> _menuTree;
+
+    private IEnumerable<TreeDataItem<AppMenu>> _menuTreeData = new List<TreeDataItem<AppMenu>>();
+    private string[] _checkedMenuKeys = Array.Empty<string>();
+    
+    // 按钮权限数据
+    private List<PageButtons> _buttonPermissions = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+    
+    private async Task LoadData()
+    {
+        try
+        {
+            // 加载用户数据
+            var sqlClient = new SqlClient();
+            _allUsers = sqlClient.Db.Queryable<User>()
+                .ToList();
+            _filteredUsers = _allUsers;
+            var menus = sqlClient.Db.Queryable<AppMenu>()
+                        .Where(m => m.Active)
+                        .ToList(); // 注意：这里我们获取所有菜单，然后自己构建树
+
+            // 构建根菜单（ParentId=0）
+            var rootMenus = menus.Where(m => m.ParentId == 0).ToList();
+
+            // // 加载菜单数据
+
+            _menuTreeData = BuildTreeData(rootMenus, menus);
+            MessageService.Info("加载菜单");
+
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error("数据加载失败: " + ex.Message);
+        }
+    }
+
+    // 构建树形数据方法
+    private IEnumerable<TreeDataItem<AppMenu>> BuildTreeData(List<AppMenu> rootMenus, List<AppMenu> allMenus)
+    {
+        return rootMenus.Select(menu => new TreeDataItem<AppMenu>
+        {
+            Key = menu.Id.ToString(),
+            Title = menu.Name,
+            Icon = menu.Icon,
+            Data = menu,
+            Children = BuildTreeData(
+                allMenus.Where(m => m.ParentId == menu.Id).ToList(),
+                allMenus
+            )
+        }).ToList();
+    }
+    
+    // 将菜单转换为树形结构数据
+    private IEnumerable<TreeDataItem<AppMenu>> ConvertToTreeData(List<AppMenu> menus)
+    {
+        return menus.Select(menu => new TreeDataItem<AppMenu>
+        {
+            Key = menu.Id.ToString(),
+            Title = menu.Name,
+            Data = menu,
+            Icon = menu.Icon,
+            Children = menu.Children?.Count > 0 ? ConvertToTreeData(menu.Children) : null
+        });
+    }
+    
+    // 过滤用户
+    private void FilterUsers(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _filteredUsers = _allUsers;
+            return;
+        }
+        
+        _filteredUsers = _allUsers.Where(u => 
+            (u.Name?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (u.Account?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)
+        ).ToList();
+    }
+    
+    // 选择用户
+    private async void SelectUser(User user)
+    {
+        _selectedUser = user;
+        await LoadUserPermissions();
+    }
+    
+    // 加载用户权限
+    private async Task LoadUserPermissions()
+    {
+        if (_selectedUser == null) return;
+        
+        try
+        {
+            var sqlClient = new SqlClient();
+            
+            // 加载用户角色
+            _selectedUser.Roles = sqlClient.Db.Queryable<User, UserRole, Role>(
+                    (u, ur, r) => u.Id == ur.UserId && ur.RoleId == r.Id
+                )
+                .Where((u, ur, r) => u.Id == _selectedUser.Id)
+                .Select((u, ur, r) => r)
+                .ToList();
+            
+            // 加载菜单权限
+            var userPermissions = await GetUserPermissions(_selectedUser);
+
+            // 使用递归获取所有树节点
+            var allNodes = _menuTreeData.SelectMany(m => m.Flatten()).ToList();
+
+            _checkedMenuKeys = userPermissions
+                .Where(p => p.StartsWith("menu:view"))
+                .Select(p => allNodes.FirstOrDefault(m =>
+                    m.Data?.PermissionKey == p)?.Key)
+                .Where(k => k != null)
+                .ToArray();
+
+            // 加载按钮权限
+            await LoadButtonPermissions();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error("权限加载失败: " + ex.Message);
+        }
+    }
+    
+    // 获取用户权限集合
+    private async Task<HashSet<string>> GetUserPermissions(User user)
+    {
+        var sqlClient = new SqlClient();
+        return new HashSet<string>(sqlClient.Db.Queryable<UserRole, RolePermission, Permission>(
+                (ur, rp, p) => ur.RoleId == rp.RoleId && rp.PermissionId == p.Id
+            )
+            .Where((ur, rp, p) => ur.UserId == user.Id)
+            .Select((ur, rp, p) => p.PermissionKey)
+            .Distinct()
+            .ToList());
+    }
+
+    // 菜单选中事件
+    private void OnMenuCheck(TreeEventArgs<string> args)
+    {
+        Console.WriteLine($"OnCheck {args.Node.Key}");
+
+    }
+
+    
+    void OnCheck(TreeEventArgs<AppMenu> args)
+    {
+        Console.WriteLine($"OnCheck {args.Node.Key}");
+    }
+
+    // 加载按钮权限
+    private async Task LoadButtonPermissions()
+    {
+        if (_selectedUser == null) return;
+        
+        try
+        {
+            var sqlClient = new SqlClient();
+            
+            // 获取所有按钮
+            var allButtons = sqlClient.Db.Queryable<SysButton>().ToList();
+            var allPages = sqlClient.Db.Queryable<SysPage>().ToList();
+            
+            // 获取当前用户按钮权限
+            var userPermissions = await GetUserPermissions(_selectedUser);
+            
+            // 组织按页面分组
+            _buttonPermissions = allPages.Select(page => new PageButtons
+            {
+                PageId = page.Id,
+                PageName = page.DisplayName,
+                Buttons = allButtons
+                    .Where(b => b.PageId == page.Id)
+                    .Select(b => new ButtonPermission
+                    {
+                        ButtonId = b.Id,
+                        DisplayText = b.DisplayText,
+                        Icon = b.IconType,
+                        PermissionKey = b.PermissionKey,
+                        IsAssigned = userPermissions.Contains(b.PermissionKey),
+                        IsFixed = false
+                    })
+                    .ToList()
+            })
+            .Where(p => p.Buttons.Count > 0)
+            .ToList();
+            MessageService.Success("按钮权限加载成功: ");
+
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error("按钮权限加载失败: " + ex.Message);
+        }
+    }
+
+    // 页面按钮权限结构
+    private class PageButtons
+    {
+        public int PageId { get; set; }
+        public string PageName { get; set; }
+        public List<ButtonPermission> Buttons { get; set; }
+    }
+
+    // 按钮权限结构
+    private class ButtonPermission
+    {
+        public int ButtonId { get; set; }
+        public string DisplayText { get; set; }
+        public string Icon { get; set; }
+        public string PermissionKey { get; set; }
+        public bool IsAssigned { get; set; }
+        public bool IsFixed { get; set; }
+    }
+    
+    // 保存权限
+    private async Task SavePermissions()
+    {
+        if (_selectedUser == null) return;
+        
+        _saving = true;
+        
+        try
+        {
+            var sqlClient = new SqlClient();
+            var db = sqlClient.Db;
+            
+            // 开始事务
+            db.BeginTran();
+            
+            // 1. 删除用户所有现有角色
+            db.Deleteable<UserRole>().Where(ur => ur.UserId == _selectedUser.Id).ExecuteCommand();
+            
+            // 2. 添加新角色
+            // 根据选中的菜单确定需要添加的角色
+            // var selectedPermissions = _menuTreeData
+            //     .Flatten()
+            //     .Where(t => _checkedMenuKeys.Contains(t.Key))
+            //     .Select(t => t.Data.PermissionKey)
+            //     .Where(p => !string.IsNullOrEmpty(p))
+            //     .Distinct()
+            //     .ToList();
+            var selectedPermissions = _menuTreeData
+                .SelectMany(root => root.Flatten()) // 使用 SelectMany 来获取所有节点
+                .Where(t => _checkedMenuKeys.Contains(t.Key))
+                .Select(t => t.Data.PermissionKey)
+                .Where(p => !string.IsNullOrEmpty(p))
+                .Distinct()
+                .ToList();
+
+
+            // 获取包含这些权限的角色
+            var roles = db.Queryable<RolePermission, Permission, Role>(
+                    (rp, p, r) => rp.PermissionId == p.Id && rp.RoleId == r.Id
+                )
+                .Where((rp, p, r) => selectedPermissions.Contains(p.PermissionKey))
+                .Select((rp, p, r) => r)
+                .Distinct()
+                .ToList();
+            
+            // 添加用户角色关联
+            var userRoles = roles.Select(r => new UserRole
+            {
+                UserId = _selectedUser.Id,
+                RoleId = r.Id
+            }).ToList();
+            
+            if (userRoles.Any())
+            {
+                db.Insertable(userRoles).ExecuteCommand();
+            }
+            
+            // 3. 保存按钮权限
+            var allButtons = _buttonPermissions.SelectMany(p => p.Buttons).ToList();
+            var assignedButtons = allButtons.Where(b => b.IsAssigned).ToList();
+            
+            // 获取这些按钮的权限
+            var buttonPermissions = db.Queryable<Permission>()
+                .Where(p => assignedButtons.Select(b => b.PermissionKey).Contains(p.PermissionKey))
+                .ToList();
+            
+            // 删除用户现有的按钮权限
+            // db.Deleteable<RolePermission>()
+            //     .Where(rp => rp.UserId == _selectedUser.Id && rp.ButtonId != null)
+            //     .ExecuteCommand();
+            // 删除之前角色中这些按钮权限（如果有的话）
+            foreach (var role in roles)
+            {
+                db.Deleteable<RolePermission>()
+                    .Where(rp => rp.RoleId == role.Id &&
+                                 buttonPermissions.Select(bp => bp.Id).Contains(rp.PermissionId))
+                    .ExecuteCommand();
+            }
+            // 添加新的按钮权限
+            // var rolePermissions = assignedButtons.Select(button => new RolePermission
+            // {
+            //     UserId = _selectedUser.Id,
+            //     PermissionId = buttonPermissions.First(p => p.PermissionKey == button.PermissionKey).Id,
+            //     ButtonId = button.ButtonId
+            // }).ToList();
+
+            // 为每个角色添加这些按钮权限
+            var rolePermissions = new List<RolePermission>();
+            foreach (var role in roles)
+            {
+                rolePermissions.AddRange(buttonPermissions.Select(permission => new RolePermission
+                {
+                    RoleId = role.Id,
+                    PermissionId = permission.Id,
+                    ButtonId = assignedButtons.FirstOrDefault(b => b.PermissionKey == permission.PermissionKey)?.ButtonId
+                }));
+            }
+            
+            if (rolePermissions.Any())
+            {
+                db.Insertable(rolePermissions).ExecuteCommand();
+            }
+            
+            // 提交事务
+            db.CommitTran();
+            
+            MessageService.Success("权限保存成功！");
+        }
+        catch (Exception ex)
+        {
+            var sqlClient = new SqlClient();
+            var db = sqlClient.Db;
+
+            sqlClient.Db.RollbackTran();
+            MessageService.Error("保存失败: " + ex.Message);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+    
+    // 辅助方法：获取用户名称首字母
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "U";
+        var parts = name.Split(' ');
+        if (parts.Length == 1) return name[0].ToString().ToUpper();
+        return $"{parts[0][0]}{parts[^1][0]}".ToUpper();
+    }
+    
+
+}
+
+<style>
+    .permission-manager {
+        padding: 16px;
+        background-color: #f0f2f5;
+        min-height: calc(100vh - 64px);
+    }
+    
+    .user-card, .permission-card, .empty-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+    }
+    
+    .empty-card {
+        height: calc(100vh - 200px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .user-badge {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .user-badge h3 {
+        margin: 0;
+        font-size: 18px;
+    }
+    
+    .user-badge span {
+        color: #8c8c8c;
+        font-size: 14px;
+    }
+    
+    .active-user {
+        background-color: #e6f7ff;
+        border-left: 3px solid #1890ff;
+    }
+    
+    .button-permission-grid {
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 8px;
+    }
+    
+    .button-card .ant-card-head {
+        background-color: #fafafa;
+    }
+    
+    .ant-list-item {
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .ant-list-item:hover {
+        background-color: #f5f5f5;
+    }
+    
+    .ant-tree li .ant-tree-node-content-wrapper {
+        padding: 4px 8px;
+    }
+    
+    .ant-tree li .ant-tree-node-content-wrapper:hover {
+        background-color: #f5f5f5;
+    }
+    
+    .ant-tree-checkbox + span {
+        padding-left: 8px;
+    }
+</style>

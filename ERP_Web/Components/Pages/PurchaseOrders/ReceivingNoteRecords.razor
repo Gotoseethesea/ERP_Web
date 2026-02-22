@@ -1,0 +1,257 @@
+﻿@page "/RnRecords"
+@using AntDesign.TableModels
+@using ERP_Web.Components.Custom
+@using ERP_Web.Repository
+@using M = ERP_Web.Models
+@using U = ERP_Web.Core.Utilities
+@using System.Text.Json
+
+<h3>PurchaseRequisitionsRecords</h3>
+<Form Model="@form">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="年份" Style="margin-bottom: 16px">
+                <Select Mode="SelectMode.Multiple"
+                        Placeholder="Please select"
+                        @bind-Values="@YearSelected"
+                        TItemValue="string"
+                        TItem="string"
+                        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+                        EnableSearch
+                        AllowClear>
+                    <SelectOptions>
+                        @foreach (var item in YearSe)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+                        }
+                    </SelectOptions>
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="月份">
+                <Select Mode="SelectMode.Multiple"
+                        Placeholder="Please select"
+                        @bind-Values="@MonthSelected"
+                        TItemValue="string"
+                        TItem="string"
+                        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+                        EnableSearch
+                        AllowClear>
+                    <SelectOptions>
+                        @foreach (var item in MonthSe)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+                        }
+                    </SelectOptions>
+                </Select>
+            </FormItem>
+        </GridCol>
+        
+        <GridCol Span="6">
+            <FormItem Label="日期范围">
+                <RangePicker TValue="DateOnly?[]" Format="yyyy-MM-dd" @bind-Value="DateOnlys" />
+            </FormItem>
+        </GridCol>
+
+        <GridCol Span="6">
+            <FormItem Label="部门">
+                <Select Mode="SelectMode.Multiple"
+                        Placeholder="Please select"
+                        @bind-Values="@DeptSelected"
+                        TItemValue="string"
+                        TItem="string"
+                        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+                        EnableSearch
+                        AllowClear>
+                    <SelectOptions>
+                        @foreach (var item in Deptlist)
+                        {
+                            <SelectOption TItemValue="string" TItem="string" Value=@item.Code Label=@item.Name />
+                        }
+                    </SelectOptions>
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="仓库">
+                <Select Mode="SelectMode.Multiple"
+                        TItem="M.Warehouse"
+                        TItemValue="string"
+                        DataSource="@Warehouselist"
+                        @bind-Values="@WarehSelected"
+                        ValueName="@nameof(M.Warehouse.Code)"
+                        LabelName="@nameof(M.Warehouse.Name)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        EnableSearch
+                        AllowClear
+                        DefaultActiveFirstOption="true">
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" Size="ButtonSize.Default" HtmlType="submit">
+                搜索
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<Table DataSource="@data" TItem="M.ReceivingNote" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+       OnRowClick="@OnRowClick"
+       Resizable
+       HidePagination Bordered
+       ScrollX="1500" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => data.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35"> </PropertyColumn>
+    <PropertyColumn Property="c => c.TrxNo" Title="单号" Width="120" Fixed="ColumnFixPlacement.Left">
+        <a>@row.TrxNo</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Date" Title="日期" Width="120" Fixed="ColumnFixPlacement.Left">
+        <a>@row.Date.ToString()</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Explanation" Title="摘要" Width="150" Fixed="ColumnFixPlacement.Left">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Explanation" Title="摘要" Width="150" Fixed="ColumnFixPlacement.Left">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.DepartmentName" Title="部门" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.EmployeeName" Title="职员" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="150">
+        <a>@row.Quantity</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Align="ColumnAlign.Right" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InsertUser" Title="操作员" Width="120">
+        <a>@row.InsertUser</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InsertTime" Title="创建日期" Width="160">
+        <a>@row.InsertTime.ToString()</a>
+    </PropertyColumn>
+
+    <PropertyColumn Property="c => c.Checker" Title="审批人" Width="120">
+        <a>@row.Checker</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Active" Title="有效" Width="120">
+        <a>@(row.Active == true ? "是" : "否")</a>
+    </PropertyColumn>
+
+    <ActionColumn Title="Action" Width="120" Fixed="ColumnFixPlacement.Right">
+        <a href="javascript:void(0)" @onclick="() => NavigateToView(row.Id)">View</a>
+        <a @onclick="() => row.Delete()">Delete</a>
+    </ActionColumn>
+</Table>
+
+
+@code {
+    [Inject]
+    private NavigationManager Navigation { get; set; }
+
+    private void NavigateToView(long id)
+    {
+        Navigation.NavigateTo($"/RNView/{id}");
+    }
+}
+@code
+{
+    List<string> MonthSe = new List<string>();
+    List<string> YearSe = new List<string>();
+    List<M.Department> Deptlist = M.Department.Select();
+    List<M.Warehouse> Warehouselist = M.Warehouse.Select();
+    IEnumerable<string> MonthSelected, YearSelected, DeptSelected, WarehSelected;  //选择的月份和年度、仓库
+    DateOnly?[] DateOnlys = new DateOnly?[2];
+    public List<IConditionalModel> conModels = new List<IConditionalModel>();  //查询条件列表
+
+    M.ReceivingNote form = new M.ReceivingNote("");
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    protected override void OnInitialized()
+    {
+        FiltrateOnInitialized();
+        Refresh();
+    }
+    public void FiltrateOnInitialized()
+    {
+        Warehouselist = M.Warehouse.Select();
+        Deptlist = M.Department.Select();
+
+        SelectInit();
+        ConModelsRefresh();
+    }
+
+    void SelectInit()
+    {
+        const int min = 1;
+        const int max = 12;
+        MonthSe = new List<string>();   //月份选项
+        YearSe = new List<string>();    //年度选项
+
+        for (var i = min; max >= i; i++)
+        {
+            var value = Convert.ToString(i);
+            var value2 = Convert.ToString(2022 + i);
+            MonthSe.Add(value);
+            YearSe.Add(value2);
+        }
+        if (YearSelected == null || YearSelected.Count() == 0)
+        {
+            YearSelected = new List<string>() { DateTime.Now.Year.ToString() };
+        }
+
+        if (MonthSelected == null || MonthSelected.Count() == 0)
+        {
+            MonthSelected = new List<string>() { DateTime.Now.Month.ToString() };
+        }
+    }
+
+    private void OnSelectedItemsChangedHandler(IEnumerable<string> values)
+    {
+        if (values != null)
+            Console.WriteLine($"selected: ${string.Join(",", values)}");
+    }
+    public void ConModelsRefresh()
+    {
+        conModels = new List<IConditionalModel>
+        {
+            U.FilterUtils.CreateConditionalCollectionForColumn<string>(YearSelected, "FiscalYear", "int"),
+            U.FilterUtils.CreateConditionalCollectionForColumn<string>(MonthSelected, "Period", "int"),
+            U.FilterUtils.CreateConditionalCollectionForColumn<string>(DeptSelected, "DepartmentCode"),
+            //U.FilterUtils.CreateConditionalCollectionForColumn<string>(WarehSelected, "WarehouseCode"),
+            U.FilterUtils.CreateConditionalCollectionForColumn(DateOnlys)
+        };
+    }
+
+    public void Refresh()
+    {
+        ConModelsRefresh();
+        SqlClient SSC = new SqlClient();
+        data = SSC.Db.Queryable<M.ReceivingNote>()
+            .Includes(y => y.Department)
+            .Includes(y => y.Employee)
+            .Where(conModels).ToList();
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(conModels)}");
+        //_table.ResetData();
+    }
+
+    List<M.ReceivingNote> data = new List<M.ReceivingNote>();
+    int RowKey, index;
+
+    private void OnRowClick(RowData<M.ReceivingNote> value)
+    {
+        RowKey = value.RowIndex;
+        index = value.RowIndex - 1;
+        Console.WriteLine($"search: {RowKey}");
+    }
+}

@@ -1,0 +1,367 @@
+﻿@* ================ 存货分类管理页面 (CategoryManagement.razor) ================ *@
+@page "/category-management"
+@using ERP_Web.Models
+@using AntDesign
+@using ERP_Web.Repository
+@using System.ComponentModel.DataAnnotations
+@inject MessageService MessageService
+@inject ModalService ModalService
+@inject NavigationManager NavigationManager
+
+<Card>
+    <PageHeader Title="存货分类管理" SubTitle="管理系统中的存货分类结构"></PageHeader>
+    <ButtonGroup>
+        <Button Type="@ButtonType.Primary" Icon="plus" OnClick="ShowAddModal">新增分类</Button>
+        <Button Type="@ButtonType.Primary" Icon="sync" OnClick="Refresh">刷新</Button>
+    </ButtonGroup>
+
+    <Table TreeChildren="c => c.Children" 
+           DataSource="@categories" 
+           TItem="Category"
+           Bordered="true"
+           Size="TableSize.Middle"
+           RowKey="c => c.Id"
+           @ref="categoryTable">
+        <PropertyColumn Property="c => c.Code">
+            <Template>
+                <Tag Color="TagColor.Blue">@context.Code</Tag>
+            </Template>
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Name" />
+        <PropertyColumn Property="c => c.CategoryPath">     </PropertyColumn>
+        <ActionColumn Title="操作" Width="200px">
+            <Template>
+                <Space>
+                    <Button Type="@ButtonType.Link" Size="ButtonSize.Small" Icon="edit"
+                            OnClick="(()=>ShowEditModal(context))">编辑</Button>
+                    <Button Type="@ButtonType.Link" Size="ButtonSize.Small" Danger Icon="delete" 
+                            OnClick="@(async e => await DeleteCategory(context))">删除</Button>
+                    <Button Type="@ButtonType.Link" Size="ButtonSize.Small" Icon="plus" 
+                            OnClick="@(e => ShowAddChildModal(context))">添加子类</Button>
+                </Space>
+            </Template>
+        </ActionColumn>
+    </Table>
+</Card>
+
+
+@if (showModal)
+{
+    <Modal Title="@(isEditing ? "编辑存货分类" : isAddingChild ? "添加子分类" : "添加存货分类")" 
+           Visible="true"
+           Width="600"
+           OnOk="SaveCategory"
+           OnCancel="CloseModal"
+           DestroyOnClose="true">
+        <Form Model="@currentCategory" LabelColSpan="8" WrapperColSpan="16">
+            <FormItem Label="上级分类" Required>
+                <TreeSelect TItem="Category"
+                            TItemValue="int"
+                            DataSource="@allCategories"
+                            @bind-Value="currentCategory.ParentId"
+                            Placeholder="请选择上级分类"
+                            TreeDefaultExpandAll
+                            AllowClear>
+                </TreeSelect>
+            </FormItem>
+            
+            <FormItem Label="分类代码" Required>
+                <Input @bind-Value="@currentCategory.Code" 
+                       Placeholder="如：RAW-MATERIAL" 
+                       AllowClear />
+            </FormItem>
+            
+            <FormItem Label="分类名称" Required>
+                <Input @bind-Value="@currentCategory.Name" 
+                       Placeholder="如：原材料" 
+                       AllowClear />
+            </FormItem>
+            
+            <FormItem Label="排序序号">
+                <Input  @bind-Value="@currentCategory.Sequence"/>
+            </FormItem>
+            
+            <FormItem Label="备注信息">
+                <TextArea @bind-Value="@currentCategory.Note" 
+                          Rows="3"
+                          Placeholder="分类用途说明" />
+            </FormItem>
+        </Form>
+    </Modal>
+}
+
+@code {
+    private Table<Category> categoryTable;
+    private List<Category> categories = new();
+    private List<Category> allCategories = new(); // 未展开的完整列表
+    private Category currentCategory = new Category();
+    private bool showModal = false;
+    private bool isEditing = false;
+    private bool isAddingChild = false;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+    
+    private async Task LoadData()
+    {
+        try
+        {
+            // 获取所有存货分类
+            allCategories = Category.Select();
+            
+            // 构建树形结构
+            categories = BuildCategoryTree(allCategories);
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"加载分类数据失败: {ex.Message}");
+        }
+    }
+    
+    // 构建树形结构
+    private List<Category> BuildCategoryTree(List<Category> allItems)
+    {
+        // 找出顶级节点（ParentId = 0）
+        var roots = allItems.Where(c => c.ParentId == 0).ToList();
+        
+        foreach (var root in roots)
+        {
+            BuildChildren(root, allItems);
+        }
+        
+        return roots;
+    }
+    
+    // 递归构建子节点
+    private void BuildChildren(Category parent, List<Category> allItems)
+    {
+        var children = allItems.Where(c => c.ParentId == parent.Id).ToList();
+        parent.Children = children;
+        
+        foreach (var child in children)
+        {
+            BuildChildren(child, allItems);
+        }
+    }
+    
+    // 获取分类的完整路径名称
+    private List<string> GetCategoryPathNames(Category category)
+    {
+        var pathNames = new List<string>();
+        var current = category;
+        
+        while (current != null)
+        {
+            pathNames.Insert(0, current.Name);
+            
+            // 查找父级
+            if (current.ParentId > 0)
+            {
+                current = allCategories.FirstOrDefault(c => c.Id == current.ParentId);
+            }
+            else
+            {
+                current = null;
+            }
+        }
+        return pathNames;
+    }
+    
+    // 刷新数据
+    private async Task Refresh()
+    {
+        await LoadData();
+        StateHasChanged();
+    }
+    
+    // 显示添加模态框
+    private void ShowAddModal()
+    {
+        currentCategory = new Category
+        {
+            ParentId = 0, // 默认顶级
+            Sequence = GetNextSequence()
+        };
+        isEditing = false;
+        isAddingChild = false;
+        showModal = true;
+    }
+    
+    // 显示添加子分类模态框
+    private void ShowAddChildModal(Category parent)
+    {
+        currentCategory = new Category
+        {
+            ParentId = parent.Id,
+            Sequence = GetNextSequence(parent.Id)
+        };
+        
+        isEditing = false;
+        isAddingChild = true;
+        showModal = true;
+    }
+    
+    // 显示编辑模态框
+    private void ShowEditModal(Category category)
+    {
+        currentCategory = new Category
+        {
+            Id = category.Id,
+            Code = category.Code,
+            Name = category.Name,
+            ParentId = category.ParentId,
+            CategoryPath = category.CategoryPath,
+            Note = category.Note,
+            Sequence = category.Sequence
+        };
+        
+        isEditing = true;
+        isAddingChild = false;
+        showModal = true;
+    }
+    
+    // 关闭模态框
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+    
+    // 保存分类
+    private async Task SaveCategory()
+    {
+        // 验证输入
+        if (string.IsNullOrWhiteSpace(currentCategory.Code))
+        {
+            MessageService.Error("分类代码不能为空");
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(currentCategory.Name))
+        {
+            MessageService.Error("分类名称不能为空");
+            return;
+        }
+        
+        try
+        {
+            var sqlClient = new SqlClient();
+            var db = sqlClient.Db;
+            
+            // 更新分类路径
+            UpdateCategoryPath(currentCategory, allCategories);
+            
+            if (isEditing)
+            {
+                // 更新现有分类
+                await db.Updateable(currentCategory).ExecuteCommandAsync();
+                MessageService.Success("分类更新成功");
+            }
+            else
+            {
+                // 添加新分类
+                currentCategory.Id = await db.Insertable(currentCategory).ExecuteReturnIdentityAsync();
+                MessageService.Success("分类添加成功");
+            }
+            
+            // 重新加载数据
+            await LoadData();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"操作失败: {ex.Message}");
+        }
+    }
+    
+    // 删除分类
+    private async Task DeleteCategory(Category category)
+    {
+        // 检查是否有子分类
+        if (allCategories.Any(c => c.ParentId == category.Id))
+        {
+            MessageService.Error("无法删除，请先删除所有子分类");
+            return;
+        }
+        
+        var confirm = await ModalService.ConfirmAsync(new ConfirmOptions
+        {
+            Title = "确认删除分类",
+            Content = $"确定要删除分类 '{category.Name} ({category.Code})' 吗？",
+            OkText = "删除",
+        });
+        
+        if (confirm)
+        {
+            try
+            {
+                var sqlClient = new SqlClient();
+                // 标记为不活跃（软删除）
+                category.Active = false;
+                await sqlClient.Db.Updateable(category).ExecuteCommandAsync();
+                
+                MessageService.Success("分类已删除");
+                await LoadData();
+            }
+            catch (Exception ex)
+            {
+                MessageService.Error($"删除失败: {ex.Message}");
+            }
+        }
+    }
+    
+    // 获取下一个可用的排序序号
+    private int GetNextSequence(int? parentId = null)
+    {
+        var siblings = allCategories
+            .Where(c => c.ParentId == parentId && c.Active)
+            .ToList();
+        
+        if (!siblings.Any()) return 1;
+        
+        return siblings.Max(c => c.Sequence ?? 0) + 1;
+    }
+    
+    // 更新分类路径
+    private void UpdateCategoryPath(Category category, List<Category> allCategories)
+    {
+        var path = new List<int>();
+        int? currentId = category.ParentId;
+        
+        while (currentId.HasValue && currentId > 0)
+        {
+            var parent = allCategories.FirstOrDefault(c => c.Id == currentId);
+            if (parent == null) break;
+            
+            path.Insert(0, parent.Id);
+            currentId = parent.ParentId;
+        }
+        
+        // 添加当前分类ID
+        if (category.Id > 0)
+        {
+            path.Add(category.Id);
+        }
+        
+        category.CategoryPath = path.Count > 0 ? $",{string.Join(",", path)}," : "";
+    }
+    
+    // 展开所有节点
+    private void ExpandAll()
+    {
+        if (categoryTable != null)
+        {
+            categoryTable.ExpandAll();
+        }
+    }
+    
+    // 折叠所有节点
+    private void CollapseAll()
+    {
+        if (categoryTable != null)
+        {
+            categoryTable.CollapseAll();
+        }
+    }
+}

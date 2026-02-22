@@ -1,0 +1,125 @@
+﻿@using ERP_Web.Core.Constants
+@using ERP_Web.Models.PrivilegeHub
+@using Microsoft.AspNetCore.Components.Authorization
+@inherits AntDomComponentBase
+@rendermode InteractiveServer
+@inject NavigationManager NavigationManager
+
+
+<Space Class="@ClassMapper.Class" Size="@("24")">
+@*     <SpaceItem>
+        <HeaderSearch Class="action search"
+                      Placeholder="Site Search"
+                      DefaultValue="umi ui"
+                      Options="DefaultOptions" />
+    </SpaceItem> *@
+    <SpaceItem>
+        <AntDesign.Tooltip Title="@("Help")" Placement="@Placement.Bottom">
+            <Unbound>
+                <span @ref="@context.Current" class="action">
+                    <Icon Type="question-circle" Theme="IconThemeType.Outline" />
+                </span>
+            </Unbound>
+        </AntDesign.Tooltip>
+    </SpaceItem>
+    <SpaceItem>
+        <AvatarDropdown Name="@UserContext.CurrentUser.Name"
+                        Avatar="@UserContext.CurrentUser.Name.PadLeft(1)"
+                        MenuItems="@AvatarMenuItems"
+                        OnItemSelected="HandleSelectUser" />
+    </SpaceItem>
+    <SpaceItem>
+        <AuthorizeView>
+            <Authorized>
+                <Space size="SpaceSize.Small">
+                    <Text type="TextElementType.Success" strong>欢迎你，@context.User.Identity?.Name</Text>
+                </Space>
+            </Authorized>
+            <NotAuthorized>
+                <Space size="SpaceSize.Small">
+                    <Text type="TextElementType.Danger" >请先登录</Text>
+                </Space>
+            </NotAuthorized>
+        </AuthorizeView>
+    </SpaceItem>
+    @*
+     <SpaceItem>
+        <NoticeIcon ClearText="Empty"
+                    ViewMoreText="see more"
+                    Count="_count"
+                    OnClear="HandleClear"
+                    OnViewMore="HandleViewMore">
+            <NoticeList TabKey="notification"
+                        Title="Notifications"
+                        EmptyText="You have viewed all notifications"
+                        ShowViewMore
+                        Data="_notifications" />
+            <NoticeList TabKey="message"
+                        Title="Messages"
+                        EmptyText="You have read all messages"
+                        ShowViewMore
+                        Data="_messages" />
+            <NoticeList TabKey="event"
+                        Title="Upcoming"
+                        EmptyText="You have completed all to do"
+                        ShowViewMore
+                        Data="_events" />
+        </NoticeIcon>
+    </SpaceItem>
+     <SpaceItem>
+        <AvatarDropdown Name="@_currentUser.Name"
+                        Avatar="@_currentUser.Avatar"
+                        MenuItems="@AvatarMenuItems"
+                        OnItemSelected="HandleSelectUser" />
+    </SpaceItem>*@
+@*     <SpaceItem>
+        <SelectLang />
+    </SpaceItem> *@
+</Space>
+@code{
+    User user = new User() { Name = "user" };
+    protected override async Task OnInitializedAsync()
+    {
+        // if (UserContext.CurrentUser == null)
+        // {
+        //     var user = User.Login("ADMIN", "1");
+
+        //     if (user != null)
+        //     {
+        //         // 登录成功，设置当前用户信息
+        //         UserContext.CurrentUser = user;
+        //         //NavigationManager.NavigateTo("/", forceLoad: true);
+        //     }
+        // }
+        if (UserContext.CurrentUser is null)
+        {
+            UserContext.CurrentUser = user;
+            //NavigationManager.NavigateTo("/login");
+        }
+    }
+
+
+    private AvatarMenuItem[] AvatarMenuItems =>
+    [
+        //new() { Key = "center", IconType = "user"},
+        //new() { Key = "setting", IconType = "setting" },
+        //new() { IsDivider = true },
+        //new() { Key = "logout", IconType = "logout"}
+    ];
+
+    public void HandleSelectUser(MenuItem item)
+    {
+        switch (item.Key)
+        {
+            case "center":
+                NavigationManager.NavigateTo("/account/center");
+                break;
+            case "setting":
+                NavigationManager.NavigateTo("/account/settings");
+                break;
+            case "logout":
+                NavigationManager.NavigateTo("/logout");
+                break;
+        }
+    }
+}

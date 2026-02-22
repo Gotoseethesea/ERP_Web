@@ -1,0 +1,340 @@
+﻿@page "/department-management"
+@using M=ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Components.Custom
+@using AntDesign
+@inject MessageService MessageService
+@inject ConfirmService ConfirmService
+@inject ReuseTabsService ReuseTabsService
+
+<PageHeader Title="部门管理" SubTitle="管理部门层级结构"></PageHeader>
+<ButtonGroup>
+    <Button Type="ButtonType.Primary" Icon="plus" OnClick="AddRootDepartment">新增根部门</Button>
+    <Button Type="ButtonType.Primary" Icon="plus" OnClick="AddSubDepartment" Disabled="@(!_selectedRows.Any())">新增子部门</Button>
+    <Button Type="ButtonType.Primary" Icon="plus" OnClick="AddSubDepartment" Disabled="@(!_selectedRows.Any())">编辑</Button>
+    <Button Type="ButtonType.Primary" Icon="reload" OnClick="Refresh">刷新</Button>
+</ButtonGroup>
+
+<Table DataSource="@departments" TItem="M.Department" Context="row" @bind-SelectedRows="_selectedRows"
+        TreeChildren="item => item.Children">
+    <Selection CheckStrictly="_checkStrictly" Type="@selectionType" />
+    <PropertyColumn Title="部门代码" Property="c => c.Code" Width="150px">
+            @if (editId == row.Id)
+            {
+                <Input @bind-Value="row.Code" OnBlur="() => stopEdit(row)"/>
+            }
+            else
+            {
+                <div class="editable-cell-value-wrap" @onclick="() => startEdit(row.Id)">
+                    @row.Code
+                </div>
+            }
+        </PropertyColumn>
+        <PropertyColumn Title="部门名称" Property="c => c.Name">
+            @if (editId == row.Id)
+            {
+                <Input @bind-Value="row.Name" OnBlur="() => stopEdit(row)"/>
+            }
+            else
+            {
+                <div class="editable-cell-value-wrap" @onclick="() => startEdit(row.Id)">
+                    @row.Name
+                </div>
+            }
+        </PropertyColumn>
+
+        <PropertyColumn Title="上级部门" Property="c => c.SuperiorDec" />
+
+        <PropertyColumn Title="层级路径" Property="c => c.DepartmentPath" />
+        <PropertyColumn Title="排序" Property="c => c.Sequence" />
+
+        <ActionColumn Title="操作" Width="200px" Fixed="ColumnFixPlacement.Right">
+            <Space>
+                <Button Type="ButtonType.Link" Size="ButtonSize.Small" Icon="plus" 
+                        OnClick="() => AddSubDepartmentTo(row)">添加子部门</Button>
+                <Popconfirm Title="确定删除此部门？"
+                            OnConfirm="() => DeleteDepartment(row)"
+                            OkText="确定"
+                            CancelText="取消">
+                    <Button Type="ButtonType.Link" Size="ButtonSize.Small" Danger Icon="delete">删除</Button>
+                </Popconfirm>
+            </Space>
+        </ActionColumn>
+</Table>
+
+
+@if (showModal)
+{
+    <Modal Title="@(currentDepartment.Id > 0 ? "编辑部门" : "新增部门")"
+           Visible="true"
+           OnCancel="CloseModal"
+           OnOk="SaveDepartment">
+        <Form Model="@currentDepartment">
+            <FormItem Label="部门代码" Required>
+                <Input @bind-Value="@currentDepartment.Code" />
+            </FormItem>
+            <FormItem Label="部门名称" Required>
+                <Input @bind-Value="@currentDepartment.Name" />
+            </FormItem>
+            <FormItem Label="备注">
+                <InputTextArea @bind-Value="@currentDepartment.Note" Rows="3" />
+            </FormItem>
+        </Form>
+    </Modal>
+}
+
+@code {
+    private List<M.Department> allDepartments = new List<M.Department>();
+    private List<M.Department> departments = new List<M.Department>();
+    private IEnumerable<M.Department> _selectedRows = [];
+    private int? editId;
+    private bool showModal = false;
+    private M.Department currentDepartment = new M.Department();
+    private bool showImageUpload = false;
+    bool _checkStrictly;
+    SelectionType selectionType = SelectionType.Checkbox;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ReuseTabsService.UpdatePage(options =>
+        {
+            options.Title = b => b.AddContent(1, "部门管理");
+            options.Order = 2;
+        });
+        
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        // 获取所有部门
+        allDepartments = M.Department.Select();
+        
+        // 构建树形结构
+        departments = M.Department.BuildTree(allDepartments, null);
+
+        MessageService.Success("部门数据已刷新");
+    }
+
+    private async Task Refresh()
+    {
+        await LoadData();
+        MessageService.Success("部门数据已刷新");
+    }
+
+    private void AddRootDepartment()
+    {
+        currentDepartment = new M.Department
+        {
+            Superior = null,
+            Active = true,
+            Sequence = M.Department.GetNextSequence(allDepartments, null)
+        };
+        showModal = true;
+    }
+
+    private void AddSubDepartment()
+    {
+        if (_selectedRows.Any())
+        {
+            var parent = _selectedRows.First();
+            AddSubDepartmentTo(parent);
+        }
+        else
+        {
+            MessageService.Warning("请先选择一个部门作为父节点");
+        }
+    }
+
+    private void AddSubDepartmentTo(M.Department parent)
+    {
+        currentDepartment = new M.Department
+        {
+            Superior = parent.Id,
+            Active = true,
+            Sequence = M.Department.GetNextSequence(allDepartments, parent.Id)
+        };
+        showModal = true;
+    }
+
+    private void startEdit(int id)
+    {
+        editId = id;
+    }
+
+    private async Task stopEdit(M.Department department)
+    {
+        try
+        {
+            // 更新上级部门名称
+            if (department.Superior.HasValue)
+            {
+                var superior = allDepartments.FirstOrDefault(d => d.Id == department.Superior.Value);
+                department.SuperiorDec = superior?.Name;
+            }
+            
+            department.Update();
+            MessageService.Success("部门信息更新成功");
+            editId = null;
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"更新失败: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteDepartment(M.Department department)
+    {
+
+        // 递归删除所有子部门
+        await DeleteDepartmentRecursive(department.Id);
+        await LoadData();
+        MessageService.Success($"部门 '{department.Name}' 及其子部门已删除");
+
+    }
+
+    private async Task DeleteDepartmentRecursive(int departmentId)
+    {
+        // 获取所有子部门
+        var children = M.Department.Select();
+        children = children.Where(d => d.Superior == departmentId).ToList();
+
+        // 递归删除子部门
+        foreach (var child in children)
+        {
+            await DeleteDepartmentRecursive(child.Id);
+        }
+
+        // 删除当前部门
+        var sqlClient = new SqlClient();
+        await sqlClient.Db.Deleteable<M.Department>(departmentId).ExecuteCommandAsync();
+    }
+
+    private async Task UpdateDepartmentImage(M.Department department, string imageUrl)
+    {
+        //department.Image = imageUrl;
+        department.Update();
+        MessageService.Success("部门图片更新成功");
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private async Task SaveDepartment()
+    {
+        if (string.IsNullOrWhiteSpace(currentDepartment.Code))
+        {
+            MessageService.Error("部门代码不能为空");
+            return;
+        }
+
+        try
+        {
+            // 设置上级部门名称
+            if (currentDepartment.Superior.HasValue)
+            {
+                var superior = allDepartments.FirstOrDefault(d => d.Id == currentDepartment.Superior.Value);
+                currentDepartment.SuperiorDec = superior?.Name;
+            }
+            
+            // 更新部门路径
+            M.Department.UpdateDepartmentPath(currentDepartment, allDepartments);
+            
+            if (currentDepartment.Id > 0)
+            {
+                currentDepartment.Update();
+                MessageService.Success("部门更新成功");
+            }
+            else
+            {
+                currentDepartment.Insert();
+                MessageService.Success("部门添加成功");
+            }
+
+            CloseModal();
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"操作失败: {ex.Message}");
+        }
+    }
+}
+
+<style>
+    .editable-cell-value-wrap {
+        padding: 5px 12px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+    }
+    
+    .editable-cell-value-wrap:hover {
+        background-color: #f5f5f5;
+        border: 1px dashed #d9d9d9;
+    }
+    
+    .image-uploader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .upload-area {
+        width: 120px;
+        height: 80px;
+        border: 1px dashed #d9d9d9;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        transition: border-color 0.3s;
+    }
+    
+    .upload-area:hover {
+        border-color: #1890ff;
+    }
+    
+    .upload-area i {
+        font-size: 24px;
+        color: #999;
+        margin-bottom: 8px;
+    }
+    
+    .image-preview {
+        position: relative;
+        width: 120px;
+        height: 80px;
+    }
+    
+    .image-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 4px;
+    }
+    
+    .image-preview button {
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        background: white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    
+    .file-input {
+        display: none;
+    }
+    
+    .department-tree-node {
+        display: flex;
+        align-items: center;
+    }
+    
+    .department-tree-icon {
+        margin-right: 8px;
+        font-size: 16px;
+    }
+</style>

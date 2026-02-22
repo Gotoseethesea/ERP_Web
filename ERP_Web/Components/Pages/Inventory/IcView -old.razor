@@ -1,0 +1,413 @@
+﻿@page "/icViewold/{Text?}"
+
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using M = ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+@using System.Text.Json;
+
+<PageTitle>库存单据查看</PageTitle>
+<h3>库存单据查看</h3>
+<Button Type="ButtonType.Primary" OnClick="IcEdit">编辑</Button>
+
+<Form Model="@Ic"
+      OnFinish="OnFinish"
+      OnFinishFailed="OnFinishFailed"
+      LabelColSpan="0"
+      WrapperColSpan="0">
+
+    <GridRow>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="代码">
+                <a>@Ic.Code</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="分类">
+                <a>@Ic.TrxGroupCode</a> <a>@Ic.TrxGroup.Name</a>
+            </FormItem>
+
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="日期">
+                <a>@Ic.Date</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="仓库">
+                <a>@Ic.Warehouse.Code</a><a>@Ic.Warehouse.Name</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="部门">
+                <a>@Ic.Department.Code</a><a>@Ic.Department.Name</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="8">
+            <FormItem Label="摘要">
+                <a>@Ic.Explanation</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label=" 数量  ">
+                <a>@Ic.Quantity</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="  金额  ">
+                <a>@Ic.Amount</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="  含税金额  ">
+                <a>@Ic.AmountIncTax</a>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+
+    <Table DataSource="@Ic.InvTrxs" TItem="M.InvTrx" Context="row" Size="TableSize.Small" HidePagination Bordered>
+        <PropertyColumn Property="c => c.InvCode" Title="存货" ColSpan="1" Width="100px">
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Inv.Name" Width="300px">
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Quantity" Title="数量">
+            <a> @Math.Round(@row.Quantity, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Price" Title="单价">
+            <a> @Math.Round(@row.Price, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Amount" Title="金额">
+            <a> @Math.Round(@row.Amount, 2)</a>
+        </PropertyColumn>
+
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.TaxRate" Title="税率">
+            <a> @Math.Round(@row.TaxRate, 2)</a>
+        </PropertyColumn>
+            <PropertyColumn Align="ColumnAlign.Right" Property="c => c.PriceIncTax" Title="含税单价">
+                <a> @Math.Round(@row.PriceIncTax, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Amount" Title="含税金额">
+            <a> @Math.Round(@row.Amount, 2)</a>
+        </PropertyColumn>
+
+        <SummaryRow>
+            <SummaryCell>Total</SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger"> </Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger" style="align-content" >@Ic.Quantity</Text>
+             </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger" style="text-align"></Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger">@Ic.Amount</Text>
+            </SummaryCell>
+         </SummaryRow>
+         <SummaryRow>
+            <SummaryCell>Balance</SummaryCell>
+            <SummaryCell ColSpan="2">
+                <Text Type="TextElementType.Danger"> 制单人:@Ic.Operator </Text>
+            </SummaryCell>
+            <SummaryCell ColSpan="2">
+                <Text Type="TextElementType.Danger"> 审批人:@Ic.Checker </Text>
+            </SummaryCell>
+            <SummaryCell ColSpan="2">
+                <Text Type="TextElementType.Danger"> 记账人:@Ic.Poster </Text>
+            </SummaryCell>
+        </SummaryRow>
+    </Table>
+<p></p>
+
+    <FormItem Label="" Name="@nameof(@Ic.InvTrxs)" Rules="[new() { Min = 1 }]">
+        @if (@IsVisible == true)
+        {
+            <Button OnClick="addRow" Type="ButtonType.Primary" Style="margin-bottom:16px" Size="ButtonSize.Small" Disabled=@Enable>
+                插入行
+            </Button>
+        }
+        <Table DataSource="@Ic.InvTrxs" TItem="M.InvTrx" Context="row" Size="TableSize.Small" HidePagination Bordered>
+
+            <PropertyColumn Property="c => c.InvCode" Title="存货" ColSpan="1" Width="100px">
+                <FormItem>
+                    <Input @bind-Value="@row.InvCode" />
+                </FormItem>
+            </PropertyColumn>
+
+            <PropertyColumn Property="c => c.Inv.Name">
+                <FormItem>
+                    <Select DataSource="@IcInvlist"
+                            Label=""
+                            @bind-Value="@row.Inv.Code"
+                            EnableSearch
+                            @* Style="width: 200px;" *@
+                            ValueName="@nameof(M.IcInv.Code)"
+                            LabelName="@nameof(M.IcInv.Name)"
+                            GroupName="@nameof(M.IcInv.CategoryCode)"
+                            TItemValue="string"
+                            TItem="M.IcInv"
+                            Placeholder="input search text"
+                            ShowArrowIcon="true"
+                            HideNotFoundContent="true"
+                            SearchDebounceMilliseconds="350"
+                            Loading="_loading"
+                            OnSearch="@(async (value) => await InvOnSearch(value))"
+                            OnSelectedItemChanged="OnSelectedItemChangedHandler">
+                    </Select>
+                </FormItem>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Quantity" Title="数量">
+                <FormItem Required>
+                    <Input @bind-Value="@row.Quantity" @bind-Value:after="AmountChange" />
+                </FormItem>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Price" Title="单价">
+                <FormItem Required>
+                    <Input @bind-Value="@row.Price" @bind-Value:after="AmountChange" text-align: right />
+                </FormItem>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Amount" Title="金额">
+                <FormItem Required>
+                </FormItem>
+            </PropertyColumn>
+        </Table>
+    </FormItem>
+    <FormItem WrapperColOffset="8" WrapperColSpan="16">
+        @if (@IsVisible == true)
+        {
+            <Button Type="@ButtonType.Primary" HtmlType="submit" Disabled=@Enable>
+                Submit
+            </Button>
+        }
+    </FormItem>
+</Form>
+
+
+@code
+{
+    [Parameter]
+    public string? Text { get; set; }
+
+    public int? Code;
+    Task<string> _oldTask;
+    string _selectedValue2;
+    bool _loading;
+
+    public M.Ic Ic = new();
+    public List<M.InvTrx> IcInvTrxs;
+    string _selectedValue;
+    string selectedIcinvName;
+    string selectedIcCode;
+    string Dept;
+    string WareH;
+    string invName;
+    string CodeEdit;
+    int count;
+    public bool Enable = true;
+    public bool IsVisible = false;
+    ColumnAlign ColR = ColumnAlign.Right;
+
+    List<M.TrxGroup> TrxGrouplist;
+    List<M.Department> Departmentlist;
+    List<M.Warehouse> Warehouselist;
+    List<M.IcInv> IcInvlist;
+    List<M.IcInv> IcInvlist2;
+    List<M.IcPrice> IcPricelist;
+    List<M.IcPrice> IcPriceInsertlist = [];
+
+
+    protected override void OnInitialized()
+    {
+        SqlClient SSC = new SqlClient();
+        TrxGrouplist = SSC.Db.Queryable<Models.TrxGroup>().ToList();
+        Departmentlist = SSC.Db.Queryable<Models.Department>().ToList();
+        Warehouselist = SSC.Db.Queryable<Models.Warehouse>().ToList();
+        IcInvlist = SSC.Db.Queryable<Models.IcInv>().ToList();
+        IcInvlist2 = SSC.Db.Queryable<Models.IcInv>().ToList();
+        IcPricelist = SSC.Db.Queryable<Models.IcPrice>().ToList();
+        IcPriceInsertlist = [];
+
+        int? Code;
+        Code = int.Parse(Text);
+        Ic = SSC.Db.Queryable<M.Ic>()
+        .IncludesAllFirstLayer()
+        .IncludesAllSecondLayer(xc => xc.InvTrxs)
+        .Where(it => it.Code == Code).First();
+    }
+    void IcEdit()
+    {
+        Enable = false;
+        IsVisible = true;
+    }
+
+
+
+    void IcTrxGroupChange(M.TrxGroup value)
+    {
+        Ic.TrxGroupCode = value?.Code;
+        Ic.TrxType = 1;
+        Ic.InsertTime = DateTime.Now;
+        Ic.LastUpdateTime = DateTime.Now;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void WarehouseChange(M.Warehouse value)
+    {
+        Ic.WarehouseCode = value?.Code;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void DeptChange(M.Department value)
+    {
+        Ic.DepartmentCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void InvChange(M.IcInv value)
+    {
+        //Ic.Department = value?.DepartmentDec;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    private void AmountChange()
+    {
+        // foreach (M.InvTrx invTrx in Ic.InvTrxs.Where(x=>x.Code==CodeEdit))
+        // {
+        //     invTrx.Amount = invTrx.Quantity * invTrx.Price;
+
+        // }
+        Ic.Quantity = 0;
+        Ic.Amount = 0;
+        Ic.AmountIncTax = 0;
+        foreach (M.InvTrx invTrx in Ic.InvTrxs)
+        {
+            // invTrx.Amount = invTrx.Quantity * invTrx.Price;
+            // invTrx.AmountIncTax = invTrx.Quantity * invTrx.PriceIncTax;
+
+            Ic.Quantity += invTrx.Quantity;
+            Ic.Amount += invTrx.Amount;
+            Ic.AmountIncTax += invTrx.AmountIncTax;
+        }
+
+        Console.WriteLine($"Price changed to: ");
+        Console.WriteLine($"Price changed to: ");
+    }
+    private M.InvTrx InvTrx = new M.InvTrx();
+    private decimal IcPriceByID(string Code)
+    {
+        decimal Price = 0M;
+        foreach (M.IcPrice IcPrice in IcPricelist.Where(x => x.InvCode == Code))
+        {
+            Price = IcPrice.Price;
+        }
+        return Price;
+    }
+
+    void addRow()
+    {
+        // M.InvTrx icinvadd = new M.InvTrx(Ic.CODE) { Code = 0, Quantity = 0, Price = 0, Amount = 0 };
+        // Ic.InvTrxs.Add(icinvadd);
+
+        count = Ic.InvTrxs.Count;
+        // invName = Ic.InvTrxs[0].Inv.InvName;
+        Console.WriteLine($"Success:{JsonSerializer.Serialize("char")}");
+        Console.WriteLine(Ic.InvTrxs.Count().ToString());
+        Console.WriteLine(Ic.InvTrxs[0]);
+        Console.WriteLine(Ic.InvTrxs[0].Inv.Name.ToString());
+        // model.Students.Add(new());
+    }
+
+    private List<M.IcInv> GetIcInvListByInvTrx(List<M.InvTrx> InvTrxs)
+    {
+        List<M.IcInv> icInvs = new List<M.IcInv>();
+        foreach (M.InvTrx invTrx in InvTrxs)
+        {
+            icInvs.Add(invTrx.Inv);
+        }
+        return icInvs;
+    }
+    private void OnFinish(EditContext editContext)
+    {
+
+        Ic.TrxType = 1;
+        Ic.Amount = 0;
+
+        foreach (M.InvTrx invTrx in Ic.InvTrxs)
+        {
+            // InvTrx.Amount = InvTrx.Quantity * InvTrx.Price;
+            // InvTrx.AmountIncTax = InvTrx.Quantity * InvTrx.PriceIncTax;
+            Ic.Amount += invTrx.Amount;
+            Ic.AmountIncTax += invTrx.AmountIncTax;
+            Ic.Quantity += invTrx.Quantity;
+            Ic.AmountIncTax = invTrx.AmountIncTax;
+
+            M.IcPrice icPrice = new M.IcPrice { InvCode = invTrx.InvCode, Quantity = invTrx.Quantity, Price = invTrx.Price, Amount = invTrx.Amount };
+
+            IcPriceInsertlist.Add(icPrice);
+        }
+        SqlClient SSC = new SqlClient();
+        SSC.Db.UpdateNav(Ic)
+            .Include(z1 => z1.InvTrxs)
+            .ExecuteCommand();
+        int res;
+        res = SSC.Db.Updateable(IcPriceInsertlist).ExecuteCommand();
+
+        IsVisible = false ;
+
+
+        Console.WriteLine($"Update Success:{JsonSerializer.Serialize(Ic)}");
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}");
+
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        Console.WriteLine($"Failed:{JsonSerializer.Serialize(Ic.Code)}");
+    }
+
+    private async Task InvOnSearch(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (_oldTask == null || _oldTask.IsCompleted)
+            {
+                _loading = true;
+                StateHasChanged();
+
+            }
+        }
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void OnSelectedItemChangedHandler(M.IcInv value)
+    {
+        string id = value.Code;
+        CodeEdit = value.Code;
+
+        foreach (M.InvTrx invTrx in Ic.InvTrxs/* .Where(M => M.Code == 0) */)
+        {
+            invTrx.InvTrxUpdateCode(Ic.Code);
+
+        }
+
+        foreach (M.InvTrx invTrx in Ic.InvTrxs.Where(M => M.InvCode == value.Code))
+        {
+            invTrx.UpdatePrice(IcPriceByID(invTrx.InvCode));
+        }
+
+
+
+        Console.WriteLine($"selected: ${value?.Code}");
+        Console.WriteLine($"selected: ${value?.Name}");
+
+    }
+
+}

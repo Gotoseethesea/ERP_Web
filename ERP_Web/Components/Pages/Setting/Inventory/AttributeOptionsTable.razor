@@ -1,0 +1,75 @@
+﻿@using ERP_Web.Models
+
+<Table DataSource="@options" TItem="InvAttributeOption" Size="TableSize.Small">
+    <PropertyColumn Property="@(c => c.Value)" Title="选项值" >
+            <Input TValue="string" @bind-Value="@context.Value"></Input>
+    </PropertyColumn>
+    <PropertyColumn Property="@(c => c.Value)" Title="价格">
+        @context.Price.ToString()
+    </PropertyColumn>
+    <ActionColumn Title="操作">
+            <Space>
+                <Button Size="ButtonSize.Small" OnClick="@(e => ShowEditOptionDialog(context))">
+                    编辑
+                </Button>
+                <Button Size="ButtonSize.Small" OnClick="@(e => UpdateOption(context))">
+                    更新
+                </Button>
+                <Popconfirm Title="确定删除此选项？" OnConfirm="@(e => DeleteOption(context))">
+                <Button Size="ButtonSize.Small" Danger>删除</Button>
+                </Popconfirm>
+            </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    [Parameter]
+    public int AttributeId { get; set; }
+
+    [Parameter]
+    public EventCallback OnOptionUpdated { get; set; }
+
+    private List<InvAttributeOption> options = new();
+    private bool loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadOptions();
+    }
+
+    private async Task LoadOptions()
+    {
+        loading = true;
+        StateHasChanged();
+
+        try
+        {
+            options = InvAttributeOption.GetByAttributeId(AttributeId);
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowEditOptionDialog(InvAttributeOption option)
+    {
+        //Parent.ShowEditOptionDialog(option);
+    }
+
+    private void UpdateOption(InvAttributeOption option)
+    {
+        option.Update();
+    }
+    
+    private async Task DeleteOption(InvAttributeOption option)
+    {
+        //await InvAttributeOption.Delete(option.Id);
+        await LoadOptions();
+        //OnOptionUpdated?.InvokeAsync();
+    }
+    
+    // 获取父组件引用
+    //private AttributeManager Parent => (AttributeManager)base.Parent;
+}

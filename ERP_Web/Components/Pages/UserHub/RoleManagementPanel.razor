@@ -1,0 +1,130 @@
+﻿<!-- 角色管理面板 -->
+@using AntDesign
+@using ERP_Web.Models.PrivilegeHub
+@inject MessageService MessageService
+
+<Card Title="角色分配" Style="margin-bottom:16px">
+    <Transfer TargetKeys="_assignedRoleIds"
+              SelectedKeys="_selectedRoleIds"
+              DataSource="@data"
+              Titles="@(new[] { "可用角色", "已分配角色" })"
+              Render="@(role => role.Title)"
+              OnChange="OnRolesChanged">
+    </Transfer>
+
+    <!-- 添加保存按钮 -->
+    <div style="margin-top: 16px; text-align: right;">
+        <Button Type="ButtonType.Primary"
+                Icon="save"
+                OnClick="SaveRoles"
+                Loading="@_isSaving">
+            保存角色分配
+        </Button>
+    </div>
+</Card>
+
+<Card Title="权限预览">
+    <Collapse>
+        @if (_assignedRoles.Any())
+        {
+            @foreach (var role in _assignedRoles)
+            {
+                <Panel Header="@role.Name">
+                    <Tree DataSource="@role.Permissions"
+                          TItem="Permission"
+                          BlockNode>
+                        <TitleTemplate Context="perm">
+                            <Tag Color="TagColor.Blue">@perm.DataItem.PermissionKey</Tag>
+                            @perm.DataItem.Description
+                        </TitleTemplate>
+                    </Tree>
+                </Panel>
+            }
+        }
+        else
+        {
+            <div style="text-align: center; padding: 20px;">
+                <Empty Description=@("尚未分配任何角色") />
+            </div>
+        }
+    </Collapse>
+</Card>
+
+@code {
+    [Parameter] public User User { get; set; }
+    [Parameter] public EventCallback OnRolesUpdated { get; set; }
+
+    private List<Role> _allRoles = new();
+    private List<TransferItem> data = new();
+    private List<string> _assignedRoleIds = new();
+    private List<string> _selectedRoleIds = new();
+    private bool _isSaving = false; // 保存状态指示器
+
+    private IEnumerable<Role> _assignedRoles =>
+            _allRoles.Where(r => _assignedRoleIds.Contains(r.Id.ToString()));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (User != null)
+        {
+            // 获取所有角色
+            _allRoles = Role.Select();
+
+            // 将角色转换为TransferItem
+            data = _allRoles.Select(r => new TransferItem
+            {
+                Key = r.Id.ToString(),
+                Title = r.Name,
+                //Description = r.Description // 添加描述信息
+            }).ToList();
+
+            // 获取用户已分配的角色ID（转换为字符串）
+            _assignedRoleIds = User.GetRoles().Select(r => r.Id.ToString()).ToList();
+        }
+    }
+
+    private async Task OnRolesChanged(TransferChangeArgs transferChange)
+    {
+        try
+        {
+            _assignedRoleIds = transferChange.TargetKeys.ToList();
+
+            MessageService.Success("角色分配已更新");
+            //await OnRolesUpdated.InvokeAsync();  不能更新父组件，否则不会体现角色修改
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"角色更新失败: {ex.Message}");
+        }
+    }
+
+    // 保存角色分配
+    private async Task SaveRoles()
+    {
+        _isSaving = true; // 开始保存，显示加载状态
+
+        try
+        {
+            // 将角色ID转换为整数
+            var roleIds = _assignedRoleIds.Select(id => int.Parse(id)).ToList();
+
+            // 更新用户角色
+            await User.UpdateRoles(roleIds);
+
+            // 显示成功消息
+            MessageService.Success("角色分配已保存", 2);
+
+            // 通知父组件更新完成
+            await OnRolesUpdated.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            // 显示错误消息
+            MessageService.Error($"保存失败: {ex.Message}", 3);
+        }
+        finally
+        {
+            _isSaving = false; // 保存完成，隐藏加载状态
+        }
+    }
+}

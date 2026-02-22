@@ -1,0 +1,14 @@
+﻿/* 隐藏所有链接下划线 */
+:root {
+    --ant-link-decoration: none;
+}
+
+a {
+    text-decoration: none !important;
+}
+
+/* 组件内链接 */
+.ant-menu-item a,
+.ant-btn > a {
+    text-decoration: none !important;
+}

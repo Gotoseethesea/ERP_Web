@@ -1,0 +1,78 @@
+﻿@using AntDesign
+@inject IMessageService _message
+<!-- Action="/api/upload" 这里替换为实际的上传接口 -->
+<Upload Action="/api/Upload/ImageUpload"
+        Name="file"
+        ListType="UploadListType.PictureCard"
+        ShowUploadList="false"
+        BeforeUpload="BeforeUpload"
+        OnChange="HandleChange">
+    @if (ImageUrl != null)
+    {
+        <img src="@ImageUrl" alt="avatar" style="width: 100%;" />
+    }
+    else
+    {
+        <div>
+            <Icon Type="@(loading ? IconType.Outline.Loading : IconType.Outline.Plus)" />
+            <div>Upload</div>
+        </div>
+    }
+</Upload>
+
+@code {
+    private bool loading = false;
+
+    [Parameter]
+    public string ImageUrl { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ImageUrlChanged { get; set; }
+
+    private bool BeforeUpload(UploadFileItem file)
+    {
+        var isJpgOrPng = file.Type == "image/jpeg" || file.Type == "image/png";
+        if (!isJpgOrPng)
+        {
+            _message.Error("只能上传JPG/PNG文件!");
+        }
+        var isLt2M = file.Size / 1024 / 1024 < 2;
+        if (!isLt2M)
+        {
+            _message.Error("图片大小不能超过2MB!");
+        }
+        return isJpgOrPng && isLt2M;
+    }
+
+    private async void HandleChange(UploadInfo fileinfo)
+    {
+        if (fileinfo.File.State == UploadState.Uploading)
+        {
+            loading = true;
+        }
+        else if (fileinfo.File.State == UploadState.Success)
+        {
+            // 假设服务器返回的响应中包含图片的URL，并且响应格式为：{ url: "http://example.com/image.jpg" }
+            // 这里根据实际接口调整
+            var response = fileinfo.File.GetResponse<ResponseModel>();
+            if (response != null)
+            {
+                ImageUrl = response.url;
+                await ImageUrlChanged.InvokeAsync(ImageUrl);
+            }
+            loading = false;
+        }
+        else if (fileinfo.File.State == UploadState.Fail)
+        {
+            _message.Error("上传失败");
+            loading = false;
+        }
+    }
+
+    public class ResponseModel
+    {
+        public string url { get; set; }
+        public string name { get; set; }
+        // 其他可能需要的字段
+    }
+}

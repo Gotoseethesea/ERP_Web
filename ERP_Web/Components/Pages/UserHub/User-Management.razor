@@ -1,0 +1,341 @@
+﻿@page "/user-management"
+@using AntDesign
+@using ERP_Web.Models.PrivilegeHub
+@inject MessageService MessageService
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>用户管理系统</PageTitle>
+
+<Row Gutter="24">
+    <!-- 左侧用户列表 -->
+    <Col Span="8">
+        <Card Title="用户列表" Bordered>
+            <Input AllowClear 
+                    Placeholder="搜索用户..." 
+                    @bind-Value="@_searchText"/>
+                
+            <Button Type="ButtonType.Primary"
+                        Icon="user-add" 
+                        Block
+                        OnClick="ShowCreateModal">
+                    新增用户
+            </Button>
+                
+            <AntList DataSource="@_filteredUsers" 
+                        Bordered>
+                <ChildContent Context="user">
+                    <ListItem Actions="@BuildUserActions(user)">
+                        <Avatar Style="background-color: #1890ff">@GetRoleInitial(user.Name)</Avatar>
+                        <ListItemMeta Title="@user.Name"
+                                        Description="@user.Account" />
+                    </ListItem>
+                </ChildContent>
+            </AntList>
+        </Card>
+    </Col>
+    
+    <!-- 右侧用户详情 -->
+    <Col Span="16">
+        @if (_selectedUser != null)
+        {
+            <Card Title="@_selectedUser.Name" Bordered>
+                <Tabs>
+            <!-- 基础信息 -->
+                    <TabPane Key="basic" Tab="基本信息">
+                        <UserForm User="@_selectedUser"
+                                  OnSave="UpdateUser"
+                                  OnCancel="DeselectUser" />
+                    </TabPane>
+                    <!-- 审批权限 -->
+                    <TabPane Key="approval" Tab="审批权限">
+                        <ApprovalManagementPanel User="@_selectedUser"
+                                                 OnApprovalsUpdated="ReloadUserApprovals" />
+                    </TabPane>
+                    <!-- 角色权限 -->
+                    <TabPane Key="roles" Tab="角色权限">
+                        <RoleManagementPanel User="@_selectedUser" 
+                                             OnRolesUpdated="ReloadUserRoles" />
+                    </TabPane>
+
+
+                    <!-- 操作日志 - 替代实现 -->
+                    <TabPane Key="logs" Tab="操作日志">
+                        <Card Title="用户操作记录">
+                            @if (_userLogs.Any())
+                            {
+                                <Timeline>
+                                    @foreach (var log in _userLogs)
+                                    {
+                                        <TimelineItem Color="@GetLogColor(log.ActionType)">
+                                            <p>@log.ActionTime.ToString("yyyy-MM-dd HH:mm")</p>
+                                            <p>@log.ActionDescription</p>
+                                            <p>操作人: @log.Operator</p>
+                                        </TimelineItem>
+                                    }
+                                </Timeline>
+                            }
+                            else
+                            {
+                                <Empty Description=@("暂无操作记录") />
+                            }
+                        </Card>
+                    </TabPane>
+                </Tabs>
+            </Card>
+        }
+        else
+        {
+            <Card Title="请选择用户" Bordered>
+            <Empty Description=@("从左侧列表选择用户进行管理")/>
+            </Card>
+        }
+    </Col>
+</Row>
+
+<!-- 新增用户模态框 -->
+<Modal @ref="_createModal"
+       Title="新增用户"
+       OnOk="CreateUser"
+       OnCancel="CloseCreateModal">
+    <UserForm User="@_newUser" 
+              OnSave="CreateUser" 
+              OnCancel="CloseCreateModal" />
+</Modal>
+
+<Button Type="ButtonType.Link"></Button>
+
+@code {
+    // 状态管理
+    private List<User> _allUsers = new();
+    private List<User> _filteredUsers = new();
+    private User _selectedUser;
+    private User _newUser = new();
+    private string _searchText = "";
+    private Modal _createModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+    // 操作日志数据
+    private List<UserLog> _userLogs = new();
+    // 当用户选择变化时加载日志
+    private async Task LoadUserLogs(int userId)
+    {
+        try
+        {
+            // 模拟从数据库获取日志数据
+            _userLogs = await Task.Run(() => new List<UserLog>
+            {
+                new UserLog {
+                    ActionTime = DateTime.Now.AddDays(-1),
+                    ActionType = "创建",
+                    ActionDescription = "用户账号创建",
+                    Operator = "管理员"
+                },
+                new UserLog {
+                    ActionTime = DateTime.Now.AddHours(-3),
+                    ActionType = "更新",
+                    ActionDescription = "更新了用户信息",
+                    Operator = "管理员"
+                },
+                new UserLog {
+                    ActionTime = DateTime.Now.AddHours(-1),
+                    ActionType = "启用",
+                    ActionDescription = "启用了用户账号",
+                    Operator = "系统"
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"日志加载失败: {ex.Message}");
+        }
+    }
+
+    // 根据日志类型获取颜色
+    private string GetLogColor(string actionType)
+    {
+        return actionType switch
+        {
+            "创建" => "green",
+            "更新" => "blue",
+            "禁用" => "red",
+            "启用" => "green",
+            "删除" => "red",
+            _ => "gray"
+        };
+    }
+
+    // 角色首字母
+    private string GetRoleInitial(string name) =>
+        !string.IsNullOrEmpty(name) ? name[0].ToString() : "R";
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            _allUsers = User.SelectIncUnActive();
+            _filteredUsers = _allUsers;
+            _selectedUser = _filteredUsers.Find(xx => xx.Account == "ADMIN");
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"用户加载失败: {ex.Message}");
+        }
+    }
+
+
+
+    // 用户操作按钮
+    private RenderFragment[] BuildUserActions(User user)
+    {
+        return new RenderFragment[]
+        {
+        // 编辑按钮
+        builder =>
+        {
+            builder.OpenComponent<Button>(0);
+            builder.AddAttribute(1, "Type", ButtonType.Link);
+            builder.AddAttribute(2, "Icon", "edit");
+            builder.AddAttribute(3, "OnClick", EventCallback.Factory.Create<MouseEventArgs>(this, () => SelectUser(user)));
+            // 可以添加ChildContent，但如果是图标按钮，可以不显示文字
+            builder.CloseComponent();
+        },
+        // 启用/禁用切换
+        builder =>
+        {
+            builder.OpenComponent<Switch>(0);
+            builder.AddAttribute(1, "Checked", user.Active);
+            builder.AddAttribute(2, "CheckedChildren", "启用");
+            builder.AddAttribute(3, "UnCheckedChildren", "禁用");
+
+           // builder.AddAttribute(2, "CheckedChildren", (RenderFragment)(b => b.AddContent(0, "启用")));
+            //builder.AddAttribute(3, "UnCheckedChildren", (RenderFragment)(b => b.AddContent(0, "禁用")));
+            builder.AddAttribute(4, "OnChange", EventCallback.Factory.Create<bool>(this, isActive => ToggleUserStatus(user, isActive)));
+            builder.CloseComponent();
+        }
+        };
+    }
+
+    // 用户头像
+    private RenderFragment BuildUserAvatar(User user) => builder =>
+    {
+        builder.OpenComponent<Avatar>(0);
+        builder.AddAttribute(1, "Style", $"background-color: {GetUserColor(user)}");
+        builder.AddAttribute(2, "ChildContent", (RenderFragment)(subBuilder => 
+        {
+            subBuilder.AddContent(3, user.Name.Substring(0, 1));
+        }));
+        builder.CloseComponent();
+    };
+
+    private string GetUserColor(User user) => 
+        user.Active ? "#1890ff" : "#f5222d";
+
+    // 用户选择
+    private void SelectUser(User user)
+    {
+        _selectedUser = user; // 深拷贝避免直接修改
+    }
+
+    private void DeselectUser() => _selectedUser = null;
+
+    // 用户状态切换
+    private async Task ToggleUserStatus(User user, bool isActive)
+    {
+        try
+        {
+            user.Active = isActive;
+            user.Update();
+            //await UserService.UpdateUserStatusAsync(user.Id, isActive);
+            MessageService.Success($"用户已{(isActive ? "启用" : "禁用")}");
+            _selectedUser = user;
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"状态更新失败: {ex.Message}");
+        }
+    }
+
+    // 用户搜索
+    private void OnSearch(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _filteredUsers = _allUsers;
+            return;
+        }
+
+        _filteredUsers = _allUsers
+            .Where(u => u.Name.Contains(value, StringComparison.OrdinalIgnoreCase) || 
+                       u.Account.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    // 新增用户
+    //private void ShowCreateModal() => _createModal;
+    private void CloseCreateModal() => _createModal.Visible = false;
+    private void ShowCreateModal()
+    {
+        _newUser = new User(); // 重置表单
+        _createModal.Visible = true;
+    }
+
+
+    private async Task CreateUser()
+    {
+        try
+        {
+            _newUser.UserInit();
+            _newUser.Insert();
+            MessageService.Success("用户创建成功");
+            //CloseCreateModal();
+            _newUser = new User(); // 重置表单
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"创建失败: {ex.Message}");
+        }
+    }
+    
+    // 更新用户
+    private async Task UpdateUser()
+    {
+        try
+        {
+            _selectedUser.Update();
+            MessageService.Success("用户信息已更新");
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"更新失败: {ex.Message}");
+        }
+    }
+
+    private async Task ReloadUserRoles()
+    {
+        if (_selectedUser != null)
+        {
+            _selectedUser.Roles = _selectedUser.GetRoles();
+        }
+    }
+
+    // 新增：审批权限保存后刷新用户审批角色数据
+    private async Task ReloadUserApprovals()
+    {
+        if (_selectedUser != null)
+        {
+            // 重新加载用户的审批角色数据
+            _selectedUser.ApprovalRoles = _selectedUser.GetApprovalRoles();
+            // 也可以调用LoadUsers()刷新整个列表
+            //await LoadUsers();
+        }
+    }
+
+}

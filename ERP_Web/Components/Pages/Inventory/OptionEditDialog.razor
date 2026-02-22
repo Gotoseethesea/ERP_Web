@@ -1,0 +1,60 @@
+﻿@using AntDesign
+@using ERP_Web.Models
+
+<Modal @ref="modal"
+       Title="@(currentOption.Id == 0 ? "添加选项" : "编辑选项")"
+       OnOk="HandleOk"
+       OnCancel="Close"
+       ConfirmLoading="@saving">
+    <Form Model="@currentOption" Layout="FormLayout.Vertical">
+        <FormItem Label="选项值" Required>
+            <Input @bind-Value="@currentOption.Value" />
+        </FormItem>
+        <FormItem Label="价格">
+            <Input @bind-Value="@currentOption.Price" />
+
+@*             <InputNumber TValue="Decimal" @bind-Value="@currentOption.Price"/>
+ *@        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    private Modal modal;
+    private InvAttributeOption currentOption = new();
+    private bool saving;
+    private bool visible;
+    
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+    
+    public void Show(InvAttributeOption option)
+    {
+        currentOption = option;
+        visible = true;
+        //modal?.Open();
+    }
+    
+    public void Close()
+    {
+        visible = false;
+        //modal?.Close();
+    }
+    
+    private async Task HandleOk()
+    {
+        saving = true;
+        StateHasChanged();
+        
+        try
+        {
+            // 触发保存事件
+            await OnSave.InvokeAsync(null);
+            Close();
+        }
+        finally
+        {
+            saving = false;
+            StateHasChanged();
+        }
+    }
+}

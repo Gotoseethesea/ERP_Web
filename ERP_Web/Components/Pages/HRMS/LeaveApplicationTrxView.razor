@@ -1,0 +1,176 @@
+﻿@page "/hr/attendance/leave"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AntDesign.TableModels
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+
+<h3>请假审批</h3>
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="审批状态">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择状态"
+                        @bind-Value="@StatusFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    <SelectOption TItemValue="int?" TItem="int?" Value="null" Label="全部" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="0" Label="待审批" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="1" Label="已通过" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="2" Label="已驳回" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="请假类型">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择类型"
+                        @bind-Value="@TypeFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    <SelectOption TItemValue="int?" TItem="int?" Value="0" Label="事假" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="1" Label="病假" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="2" Label="年假" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="3" Label="婚假" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="4" Label="产假" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="5" Label="丧假" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="请假日期">
+                <RangePicker TValue="DateOnly?[]" Format="yyyy-MM-dd" @bind-Value="DateOnlys" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="申请人">
+                <Input @bind-Value="@Keyword" Placeholder="请输入申请人姓名" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" HtmlType="button">
+                搜索
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<Table DataSource="@data" TItem="LeaveApplication" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+       Resizable
+       HidePagination Bordered
+       ScrollX="1800" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => c.Code" Title="申请单号" Width="120" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.Employee.Name" Title="申请人" Width="100">
+        @row.Employee?.Name ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Employee.Department.Name" Title="部门" Width="120">
+        @row.Employee?.Department?.Name ?? "-"
+    </PropertyColumn>
+    <ActionColumn Title="请假类型" Width="100">
+        <Tag>@row.GetLeaveTypeDisplayName()</Tag>
+    </ActionColumn>
+    <PropertyColumn Property="c => c.StartTime" Title="开始时间" Width="160">
+        @row.StartTime.ToString("yyyy-MM-dd HH:mm")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.EndTime" Title="结束时间" Width="160">
+        @row.EndTime.ToString("yyyy-MM-dd HH:mm")
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.LeaveDays" Title="请假天数" Width="100" Align="ColumnAlign.Right">
+        @row.LeaveDays.ToString("0.0")天
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Reason" Title="请假原因" Width="200" />
+    <ActionColumn Title="审批状态" Width="100">
+        <Tag Color="@(row.ApprovalStatus switch {
+            0 => "orange",
+            1 => "green",
+            2 => "red",
+            _ => "default"
+        })">
+            @row.GetApprovalStatusDisplayName()
+        </Tag>
+    </ActionColumn>
+    <PropertyColumn Property="c => c.Approver" Title="审批人" Width="100" />
+    <PropertyColumn Property="c => c.InsertTime" Title="申请时间" Width="160" />
+
+    <ActionColumn Title="操作" Width="180" Fixed="ColumnFixPlacement.Right">
+        <Space Size="SpaceSize.Small">
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small" Disabled="@(row.ApprovalStatus != 0)">审批</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">查看</Button>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    DateOnly?[] DateOnlys = new DateOnly?[2];
+    int? StatusFilter;
+    int? TypeFilter;
+    string Keyword;
+    LeaveApplication FilterModel = new LeaveApplication();
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    List<LeaveApplication> data = new List<LeaveApplication>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    public async Task Refresh()
+    {
+        try
+        {
+            SqlClient SSC = new SqlClient();
+            var query = SSC.Db.Queryable<LeaveApplication>()
+                .Includes(l => l.Employee, e => e.Department)
+                .Where(l => l.Active);
+
+            // 状态筛选
+            if (StatusFilter.HasValue)
+            {
+                query = query.Where(l => l.ApprovalStatus == StatusFilter.Value);
+            }
+
+            // 类型筛选
+            if (TypeFilter.HasValue)
+            {
+                query = query.Where(l => l.LeaveType == TypeFilter.Value);
+            }
+
+            // 日期筛选
+            if (DateOnlys[0].HasValue)
+            {
+                query = query.Where(l => l.StartTime >= DateOnlys[0].Value.ToDateTime(TimeOnly.MinValue));
+            }
+            if (DateOnlys[1].HasValue)
+            {
+                query = query.Where(l => l.EndTime <= DateOnlys[1].Value.ToDateTime(TimeOnly.MaxValue));
+            }
+
+            // 姓名筛选
+            if (!string.IsNullOrEmpty(Keyword))
+            {
+                query = query.Where(l => l.Employee.Name.Contains(Keyword));
+            }
+
+            data = await query.OrderByDescending(l => l.InsertTime).ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询请假申请失败：{ex.Message}");
+            data = new List<LeaveApplication>();
+        }
+    }
+}

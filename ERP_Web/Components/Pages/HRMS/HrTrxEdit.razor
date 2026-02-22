@@ -1,0 +1,165 @@
+﻿@page "/HR/HrTrxEdit/{Id?}"
+@rendermode InteractiveServer
+@using AntDesign
+@inject MessageService MessageService
+@inject ConfirmService ConfirmService
+@inject NavigationManager NavigationManager
+@using ERP_Web.Repository;
+@using ERP_Web.Models.HRMS;
+@using ERP_Web.Models;
+<PageTitle>人事异动单</PageTitle>
+
+<Row Gutter="16" Align="RowAlign.Middle" Style="margin-bottom:16px">
+    <Col>
+        <Title Level="3">人事异动单</Title>
+        <Text Type="TextElementType.Secondary">单据号：@Data.Code</Text>
+    </Col>
+    <Col>
+        <Button Type="ButtonType.Primary" OnClick="Submit" Disabled="@(!string.IsNullOrEmpty(Data.Approver))">提交审批</Button>
+        <Button Type="ButtonType.Default" OnClick="Print" Style="margin-left:8px">打印</Button>
+    </Col>
+</Row>
+
+<Form Model="@Data" OnFinish="Save">
+    <GridRow>
+        <GridCol Span="6">
+            <FormItem Label="异动类型">
+                <Select @bind-Value="@Data.TrxType" TItem="int" TItemValue="int">
+                    <SelectOption Value="1">入职</SelectOption>
+                    <SelectOption Value="2">离职</SelectOption>
+                    <SelectOption Value="3">调岗</SelectOption>
+                    <SelectOption Value="4">调薪</SelectOption>
+                    <SelectOption Value="5">转正</SelectOption>
+                    <SelectOption Value="6">部门调动</SelectOption>
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="员工">
+                <Select @bind-Value="@Data.EmployeeCode" DataSource="@_employeeList" LabelName="Name" ValueName="Code" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="生效日期">
+                <DatePicker @bind-Value="@Data.EffectiveDate" />
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <!-- 根据异动类型动态显示对应字段 -->
+    @if (Data.TrxType is 3 or 6)
+    {
+        <GridRow>
+            <GridCol Span="6">
+                <FormItem Label="原部门">
+                    <Select @bind-Value="@Data.OldDepartmentCode" DataSource="@_departmentList" LabelName="Name" ValueName="Code" Disabled />
+                </FormItem>
+            </GridCol>
+            <GridCol Span="6">
+                <FormItem Label="新部门">
+                    <Select @bind-Value="@Data.NewDepartmentCode" DataSource="@_departmentList" LabelName="Name" ValueName="Code" />
+                </FormItem>
+            </GridCol>
+            <GridCol Span="6">
+                <FormItem Label="新岗位">
+                    <Select @bind-Value="@Data.NewPositionCode" DataSource="@_positionList" LabelName="Name" ValueName="Code" />
+                </FormItem>
+            </GridCol>
+        </GridRow>
+    }
+
+    @if (Data.TrxType == 4)
+    {
+        <GridRow>
+            <GridCol Span="6">
+                <FormItem Label="原薪资">
+                </FormItem>
+            </GridCol>
+            <GridCol Span="6">
+                <FormItem Label="新薪资">
+                </FormItem>
+            </GridCol>
+        </GridRow>
+    }
+
+    <GridRow>
+        <GridCol Span="18">
+            <FormItem Label="异动原因">
+                <Input @bind-Value="@Data.Reason" Rows="3" />
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <Button Type="ButtonType.Primary" HtmlType="submit">保存</Button>
+</Form>
+
+@code {
+    [Parameter]
+    public string? Id { get; set; }
+    private HrTransaction Data = new();
+    private List<Employee> _employeeList = [];
+    private List<Department> _departmentList = [];
+    private List<Position> _positionList = [];
+
+    protected override void OnInitialized()
+    {
+        var db = new SqlClient().Db;
+        _employeeList = db.Queryable<Employee>().ToList();
+        _departmentList = db.Queryable<Department>().ToList();
+        _positionList = db.Queryable<Position>().ToList();
+        
+        if (!string.IsNullOrEmpty(Id))
+        {
+            //var db = new SqlClient().Db;
+            Data = db.Queryable<HrTransaction>().First(t => t.Code == Id);
+        }
+        else
+        {
+            Data.Code = "HR_TRX_" + DateTime.Now.ToString("yyyyMMddHHmmss");
+            Data.Operator = "当前登录用户";
+        }
+    }
+
+    // 保存+审批后自动更新员工档案逻辑和你现有库存单据审核逻辑完全一致，复用现有审批流
+    private void Save()
+    {
+        // 保存逻辑
+        var db = new SqlClient().Db;
+        db.Insertable(Data).ExecuteCommand();
+        MessageService.Success("保存成功");
+    }
+
+    private void Submit()
+    {
+        // 提交审批逻辑，复用你现有审批流框架，审批通过后执行以下逻辑更新员工档案：
+        /*
+        if (审批通过)
+        {
+            var emp = SqlClient.Db.Queryable<Employee>().First(e => e.Code == Data.EmployeeCode);
+            switch (Data.TrxType)
+            {
+                case 3: // 调岗
+                    emp.DepartmentCode = Data.NewDepartmentCode;
+                    emp.PositionCode = Data.NewPositionCode;
+                    break;
+                case 4: // 调薪
+                    emp.BaseSalary = Data.NewTotalSalary * 0.7M; // 按薪资比例拆分
+                    emp.PostSalary = Data.NewTotalSalary * 0.3M;
+                    break;
+                case 2: // 离职
+                    emp.Status = 3;
+                    emp.ResignDate = Data.EffectiveDate;
+                    break;
+            }
+            SqlClient.Db.Updateable(emp).ExecuteCommand();
+            Data.IsEffective = true;
+            SqlClient.Db.Updateable(Data).ExecuteCommand();
+        }
+        */
+    }
+
+    private void Print()
+    {
+        // 复用你现有的打印模板框架，直接新增人事异动单打印模板即可
+    }
+}

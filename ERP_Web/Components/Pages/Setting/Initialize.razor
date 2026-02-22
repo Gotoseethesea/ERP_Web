@@ -1,0 +1,1689 @@
+﻿@page "/initialize"
+@using ERP_Web.Models
+@using ERP_Web.Models.HRMS
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+
+@* @rendermode InteractiveAuto *@
+@rendermode InteractiveServer
+
+<PageTitle>Initialize</PageTitle>
+<PageHeader Title="数据初始化" SubTitle="将系统数据初始化为默认状态"></PageHeader>
+
+<ButtonGroup>
+    <Button class="btn btn-ButtonType.Primary" @onclick="InitDB">数据库全部初始化</Button>
+    <Button class="btn btn-ButtonType.Primary" @onclick="InitTable">初始化单个表</Button>
+    <Button class="btn btn-ButtonType.Primary" @onclick="SysModulInit">更新模板数据</Button>
+    <Button class="btn btn-ButtonType.Primary" @onclick="AddMenuList">更新菜单数据</Button>
+    <Button class="btn btn-ButtonType.Primary" @onclick="AddPermissions">更新权限数据</Button>
+    <Button class="btn btn-ButtonType.Primary" @onclick="UpdateSetting">初始化设置数据</Button>
+    <Button class="btn btn-ButtonType.Primary" @onclick="insertintoDate">增加自定义数据</Button>
+    <Button Type="ButtonType.Primary">Hello World!</Button>
+</ButtonGroup>
+<h3>Test  @mes</h3>
+
+@code {
+    private int currentCount = 0;
+    private List<IcInv> ListOfIcInv;
+    protected override async Task OnInitializedAsync()
+    {
+        //await Task.Delay(500);
+        // ListOfIcInv = SSC.Db.Queryable<IcInv>().ToList();
+    }
+
+    private string mes = "--";
+    private void InitDB()
+    {
+        SqlClient SSC = new SqlClient();
+        SSC.Db.CodeFirst.InitTables<TrxGroup>();
+        SSC.Db.CodeFirst.InitTables<InvTrx>();
+        SSC.Db.CodeFirst.InitTables<Category>();
+        SSC.Db.CodeFirst.InitTables<IcInvImage>();
+        SSC.Db.CodeFirst.InitTables<Ic>();
+        SSC.Db.CodeFirst.InitTables<IcPrice>();
+        SSC.Db.CodeFirst.InitTables<Models.IcInv>();
+        SSC.Db.CodeFirst.InitTables<Warehouse>();
+        SSC.Db.CodeFirst.InitTables<Department>();
+        SSC.Db.CodeFirst.InitTables<Department>();
+        SSC.Db.CodeFirst.InitTables<InventoryCostingMethod>();
+        SSC.Db.CodeFirst.InitTables<InventoryBalance>();
+        SSC.Db.CodeFirst.InitTables<InventoryCostingMethod>();
+        SSC.Db.CodeFirst.InitTables<InventoryBalance>();
+        SSC.Db.CodeFirst.InitTables<Unit>();
+        //SSC.Db.CodeFirst.InitTables<InventoryUnit>();
+        SSC.Db.CodeFirst.InitTables<Stocktake>();
+        SSC.Db.CodeFirst.InitTables<StocktakeDetail>();
+        SSC.Db.CodeFirst.InitTables<Employee>();
+        SSC.Db.CodeFirst.InitTables<User>();
+        SSC.Db.CodeFirst.InitTables<MenuList>();
+        SSC.Db.CodeFirst.InitTables<PoTrxGroup>();
+        SSC.Db.CodeFirst.InitTables<ApprovalNode>();
+        SSC.Db.CodeFirst.InitTables<ApprovalType>();
+        SSC.Db.CodeFirst.InitTables<ApprovalStep>();
+        SSC.Db.CodeFirst.InitTables<ApprovalProcess>();
+        SSC.Db.CodeFirst.InitTables<Specification>();
+        SSC.Db.CodeFirst.InitTables<InventoryItem>();
+        SSC.Db.CodeFirst.InitTables<PoTrxGroup>();
+        SSC.Db.CodeFirst.InitTables<CartItem>();
+        SSC.Db.CodeFirst.InitTables<ShoppingCart>();
+        SSC.Db.CodeFirst.InitTables<PoTrxGroup>();
+        //SSC.Db.CodeFirst.InitTables<PoTrxType>(); //没有这个吗？
+        SSC.Db.CodeFirst.InitTables<ITInvInOut>();
+        SSC.Db.CodeFirst.InitTables<PRInvInOut>();
+        SSC.Db.CodeFirst.InitTables<PurchaseRequisition>();
+        SSC.Db.CodeFirst.InitTables<POInvInOut>();
+        SSC.Db.CodeFirst.InitTables<PurchaseOrder>();
+        SSC.Db.CodeFirst.InitTables<RNInvInOut>();
+        SSC.Db.CodeFirst.InitTables<ReceivingNote>();
+        SSC.Db.CodeFirst.InitTables<InventoryBalance>();
+
+        mes = "初始化数据库成功";
+    }
+    private void InitTable()
+    {
+        SqlClient SSC = new SqlClient();
+
+        SSC.Db.CodeFirst.InitTables<MenuList>();
+        SSC.Db.CodeFirst.InitTables<Role>();
+        SSC.Db.CodeFirst.InitTables<User>();
+
+        // 初始化表结构
+        SSC.Db.CodeFirst.InitTables(
+            typeof(User),
+            typeof(Role),
+            typeof(UserRole),
+            typeof(Permission),
+            typeof(RolePermission),
+            typeof(AppMenu),
+            typeof(ApprovalNode)
+        );
+
+        // 初始化表结构
+        SSC.Db.CodeFirst.InitTables(
+            typeof(InvAttribute),
+            typeof(SpecificationAttributeOptionMapping),
+            typeof(FIFOInventoryLot),
+            typeof(Specification),
+            typeof(InventoryItem)
+        );
+
+        // 初始化表结构
+        SSC.Db.CodeFirst.InitTables(
+            typeof(InventoryBalanceHistory),
+            typeof(FIFOInventoryLotHistory),
+            typeof(FIFOInventoryLot),
+            typeof(InventoryClosingRecord)
+        );
+
+        // 初始化表结构
+        SSC.Db.CodeFirst.InitTables(
+            typeof(ApprovalRole),
+            typeof(UserApprovalRole)
+        );
+
+        SSC.Db.CodeFirst.InitTables<ApprovalNode>();
+        SSC.Db.CodeFirst.InitTables<ApprovalType>();
+        SSC.Db.CodeFirst.InitTables<ApprovalStep>();
+        SSC.Db.CodeFirst.InitTables<ApprovalProcess>();
+        SSC.Db.CodeFirst.InitTables<InventoryItem>();
+        SSC.Db.CodeFirst.InitTables<PRInvInOut>();
+        SSC.Db.CodeFirst.InitTables<PurchaseRequisition>();
+        SSC.Db.CodeFirst.InitTables<POInvInOut>();
+        SSC.Db.CodeFirst.InitTables<PurchaseOrder>();
+        SSC.Db.CodeFirst.InitTables<RNInvInOut>();
+        SSC.Db.CodeFirst.InitTables<ReceivingNote>();
+        SSC.Db.CodeFirst.InitTables<SysAttachment>();
+        SSC.Db.CodeFirst.InitTables<SysPage>();
+        SSC.Db.CodeFirst.InitTables<SysButton>();
+
+
+        // 在AddMenuList方法最后加这行，自动创建所有人事表
+        SSC.Db.CodeFirst.InitTables(
+            typeof(Employee),
+            typeof(RecruitmentPlan),
+            typeof(Candidate),
+            typeof(AttendanceRecord),
+            typeof(LeaveApplication),
+            typeof(SalaryCalculate),
+            typeof(SalaryRecord)
+        //typeof(EmployeeTransfer)
+        );
+
+        SSC.Db.CodeFirst.InitTables(
+            typeof(PositionDepartmentMapping),
+            typeof(Position),
+            typeof(SalaryLevel),
+            typeof(HREmployee),
+            typeof(EmployeeContract),
+            typeof(HrTransaction),
+            typeof(SalaryRecord)
+        //typeof(EmployeeTransfer)
+        );
+
+        var role = new Role()
+            {
+                Code = "All",
+                Name = "All",
+                Note = "拥有所有权限的角色"
+            };
+        var role2 = new Role()
+        {
+            Code = "99",
+            Name = "Minimal",
+            Note = "最低权限"
+        };
+        mes = "单个表初始化成功";
+    }
+    //菜单数据更新
+    private void AddMenuListold()
+    {
+        List<AppMenu> menus = new List<AppMenu> {
+            new AppMenu
+            {
+                Code =  "Login1st",
+                Path = "/login",
+                Name = "登录",
+                Key = "Login",
+                Icon = "login",
+                ParentId = 0,
+                PermissionKey = "*" // 首页基础访问权限
+            },
+            new AppMenu
+            {
+                Code = "Home",
+                Path = "/",
+                Name = "Home",
+                Key = "home",
+                Icon = "home",
+                ParentId = 0,
+                PermissionKey = "menu:view:home" // 首页基础访问权限
+            },
+            new AppMenu
+            {
+                Code = "Purchase",
+                Path = "/PrNew",
+                Name = "采购",
+                Key = "PurchaseRequisitions",
+                Icon = "shopping-cart",
+                ParentId = 0,
+                PermissionKey = "menu:view:purchase", // 采购模块入口权限
+                Children = new List<AppMenu> {
+                    new AppMenu{
+                        Code = "PrNew",
+                        Path = "/PrNew",
+                        Name = "新建采购单",
+                        Key = "Pr.New",
+                        Icon = "plus-square",
+                        PermissionKey = "purchase:create" // 采购单创建权限
+                    },
+                    new AppMenu{
+                        Code = "PrRecords",
+                        Path = "/PrRecords",
+                        Name = "采购记录",
+                        Key = "PrRecords",
+                        Icon = "unordered-list",
+                        PermissionKey = "purchase:view" // 采购记录查看权限
+                    },
+                    new AppMenu{
+                        Code = "PrApproval",
+                        Path = "/PrApproval",
+                        Name = "采购审批",
+                        Key = "PrApproval",
+                        Icon = "unordered-list",
+                        PermissionKey = "purchase:approve" // 采购审批权限
+                    },
+                    new AppMenu{
+                        Code = "PoRecords",
+                        Path = "/PoRecords",
+                        Name = "采购订单",
+                        Key = "PoRecords",
+                        Icon = "unordered-list",
+                        PermissionKey = "purchase:order:view" // 订单查看权限
+                    },
+                    new AppMenu{
+                        Code = "RNRecords",
+                        Path = "/RNRecords",
+                        Name = "收货单",
+                        Key = "RNRecords",
+                        Icon = "unordered-list",
+                        PermissionKey = "inventory:receive:view" // 收货操作权限
+                    }
+                }
+            },
+            new AppMenu
+            {
+                Code = "inventory",
+                Path = "/inventory_new",
+                Name = "库存",
+                Key = "IcAdd",
+                Icon = "appstore",
+                ParentId = 0,
+                PermissionKey = "menu:view:inventory", // 库存模块入口权限
+                Children = new List<AppMenu> {
+                    new AppMenu{
+                        Code = "inventory_new",
+                        Path = "/inventory_new",
+                        Name = "库存收发",
+                        Key = "icadd.icadd",
+                        Icon = "plus-square",
+                        PermissionKey = "inventory:manage" // 库存管理全权限
+                    },
+                    new AppMenu{
+                        Code = "inventory_records",
+                        Path = "/inventory_records",
+                        Name = "库存记录",
+                        Key = "inventory_records",
+                        Icon = "unordered-list",
+                        PermissionKey = "inventory:view" // 库存记录查看权限
+                    },
+                    new AppMenu{
+                        Code = "balance",
+                        Path = "/inventory-balance",
+                        Name = "库存结余",
+                        Key = "inventory-balance",
+                        Icon = "menu-unfold",
+                        PermissionKey = "inventory:balance:view" // 结余查看权限
+                    },
+                    new AppMenu{
+                        Code = "stocktake",
+                        Path = "/inventory-stocktake",
+                        Name = "库存盘点",
+                        Key = "inventory-stocktake",
+                        Icon = "menu-unfold",
+                        HideChildrenInMenu = true,
+                        PermissionKey = "inventory:stocktake" // 盘点操作权限
+                    },
+                    new AppMenu{
+                        Code = "MonthlyClosing",
+                        Path = "/inventory-MonthlyClosing",
+                        Name = "库存结账",
+                        Key = "inventory-MonthlyClosing",
+                        Icon = "issues-close",
+                        HideChildrenInMenu = true,
+                        PermissionKey = "inventory:monthlyclosing" // 期末结账操作权限
+                    },
+                    new AppMenu{
+                        Code = "inventory_report",
+                        Path = "/inventory-report/inventory_stock_summary",
+                        Name = "库存报表",
+                        Key = "inventory-report",
+                        Icon = "table",
+                        PermissionKey = "inventory:report", // 报表
+                        Children = new List<AppMenu>{
+                            new AppMenu{
+                                Code = "inventory_stock_summary",
+                                Path = "/inventory-report/inventory_stock_summary",
+                                Name = "收发存汇总表",
+                                Key = "inventory_stock_summary",
+                                Icon = "issues-close",
+                                HideChildrenInMenu = true,
+                                PermissionKey = "inventory:report:inventory_stock_summary"
+                            },
+                            new AppMenu{
+                                Code = "inventory_flow",
+                                Path = "/inventory-report/inventory_flow",
+                                Name = "出入库流水帐",
+                                Key = "inventory_flow",
+                                Icon = "issues-close",
+                                HideChildrenInMenu = true,
+                                PermissionKey = "inventory:report:inventory_flow"
+                            }
+                        }
+                    }
+
+                    ///inventory_stock_summary inventory_flow
+                }
+            },
+            new AppMenu
+            {
+                Code = "sales_center",
+                Path = "/sales",
+                Name = "销售中心",
+                Key = "sales_center",
+                Icon = "shopping",  // 更符合销售中心的图标
+                ParentId = 0,
+                PermissionKey = "menu:view:sales_center",
+                Children = new List<AppMenu>
+                {
+                    // 商品列表
+                    new AppMenu
+                    {
+                        Code = "sales_products",
+                        Path = "/sales/products",
+                        Name = "商品列表",
+                        Key = "sales_products",  // 统一使用"sales_"前缀
+                        Icon = "appstore",  // 商品展示图标
+                        PermissionKey = "sales:products:view",  // 统一权限前缀
+                        HideChildrenInMenu = true
+                    },
+
+                    // 购物车
+                    new AppMenu
+                    {
+                        Code = "sales_cart",
+                        Path = "/sales/cart",  // 统一路径前缀
+                        Name = "购物车",
+                        Key = "sales_cart",  // 统一命名规范
+                        Icon = "shopping-cart",
+                        PermissionKey = "sales:cart:view",  // 统一权限前缀
+                        HideChildrenInMenu = true
+                    },
+
+                    // 销售订单
+                    new AppMenu
+                    {
+                        Code = "sales_orders",
+                        Path = "/sales/orders",  // 统一路径前缀
+                        Name = "销售订单",
+                        Key = "sales_orders",  // 保持统一
+                        Icon = "solution",
+                        PermissionKey = "sales:orders:view",  // 统一权限前缀
+                        HideChildrenInMenu = true
+                    },
+                    // 新增：发货列表
+                    new AppMenu
+                    {
+                        Code = "sales_shipments",
+                        Path = "/sales/shipments",
+                        Name = "发货列表",
+                        Key = "sales_shipments",
+                        Icon = "car",
+                        PermissionKey = "sales:shipments:view",
+                        HideChildrenInMenu = true
+                    },
+                    // 报表
+                    new AppMenu
+                    {
+                        Code = "sales_reports",
+                        Path = "/sales/reports",  // 统一路径
+                        Name = "销售报表",
+                        Key = "sales_reports",  // 更准确的名称
+                        Icon = "pie-chart",  // 更专业的报表图标
+                        PermissionKey = "sales:reports:view",  // 统一权限前缀
+                        HideChildrenInMenu = true,
+                        // 添加子报表菜单（可选）
+                        Children = new List<AppMenu>
+                        {
+                            new AppMenu
+                            {
+                                Code = "sales_daily_report",
+                                Path = "/sales/reports/daily",
+                                Name = "日报表",
+                                Key = "sales_daily_report",
+                                Icon = "bar-chart",
+                                PermissionKey = "sales:reports:daily"
+                            },
+                            new AppMenu
+                            {
+                                Code = "sales_customer_report",
+                                Path = "/sales/reports/customers",
+                                Name = "客户分析",
+                                Key = "sales_customer_report",
+                                Icon = "team",
+                                PermissionKey = "sales:reports:customers"
+                            }
+                        }
+                    }
+                }
+            }, 
+
+            new AppMenu
+            {
+                Code = "Counter",
+                Path = "/counter",
+                Name = "Counter",
+                Key = "counter",
+                Icon = "menu-unfold",
+                ParentId = 0,
+                PermissionKey = "*" // 公开页面无需权限
+            },
+            new AppMenu
+            {
+                Code = "Setting",
+                Path = "/initialize",
+                Name = "设置",
+                Key = "setting",
+                Icon = "setting",
+                ParentId = 0,
+                PermissionKey = "menu:view:setting", // 设置模块入口权限
+                Children = new List<AppMenu> {
+                    new AppMenu{
+                        Code = "Init",
+                        Path = "/initialize",
+                        Name = "初始化",
+                        Key = "setting-initialize",
+                        Icon = "setting",
+                        PermissionKey = "system:initialize" // 系统初始化权限
+                    },
+                    new AppMenu{
+                        Code = "Login",
+                        Path = "/login",
+                        Name = "登录",
+                        Key = "setting-login",
+                        Icon = "login",
+                        PermissionKey = "" // 登录页面公开
+                    },
+                    new AppMenu{
+                        Code = "Dept",
+                        Path = "/department-management",
+                        Name = "部门设置",
+                        Key = "setting-dept",
+                        Icon = "deployment-unit",
+                        PermissionKey = "system:dept:manage" // 部门管理权限
+                    },
+                    new AppMenu{
+                        Code = "Users",
+                        Path = "/user-management",
+                        Name = "用户管理",
+                        Key = "setting-user",
+                        Icon = "team",
+                        PermissionKey = "system:User:manage" // 用户管理
+                    },
+                    new AppMenu{
+                        Code = "Roles",
+                        Path = "/role-management",
+                        Name = "角色权限",
+                        Key = "setting-roles",
+                        Icon = "control",
+                        PermissionKey = "system:role:manage" // 角色权限
+                    },
+                    new AppMenu{
+                        Code = "Permissions",
+                        Path = "/permission-management",
+                        Name = "功能管理",
+                        Key = "setting-permissions",
+                        Icon = "function",
+                        PermissionKey = "system:permissions:manage" // 角色权限
+                    },
+                    new AppMenu{
+                        Code = "测试一",
+                        Path = "/temp",
+                        Name = "测试",
+                        Key = "setting-temp",
+                        Icon = "folder",
+                        PermissionKey = "*" // 测试一
+                    },
+                    new AppMenu{
+                            Code = "测试二",
+                            Path = "/temp2",
+                            Name = "测试",
+                            Key = "setting-temp2",
+                            Icon = "folder",
+                            PermissionKey = "*" // 测试二
+                        },
+                    new AppMenu{
+                        Code = "Picc",
+                        Path = "/category-management",
+                        Name = "采购库存",
+                        Key = "setting-POandIC",
+                        Icon = "shopping-cart",
+                        PermissionKey = "system:config", // 系统配置权限
+                        Children = new List<AppMenu> {
+                            new AppMenu{
+                                Code = "category",
+                                Path = "/category-management",
+                                Name = "存货分类",
+                                Key = "setting-category",
+                                Icon = "folder",
+                                PermissionKey = "inventory:category:manage" // 分类管理权限
+                            },
+                            new AppMenu{
+                                Code = "Inventoryitem",
+                                Path = "/inventoryitem",
+                                Name = "存货档案",
+                                Key = "inventoryitem",
+                                Icon = "folder",
+                                PermissionKey = "inventory:item:manage" // 存货管理权限
+                            },
+                            new AppMenu{
+                                Code = "Warehouse",
+                                Path = "/warehouse",
+                                Name = "仓库档案",
+                                Key = "warehouse",
+                                Icon = "folder",
+                                PermissionKey = "inventory:warehouse:manage" // 仓库管理权限
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        SqlClient SSC = new SqlClient();
+        SSC.Db.DbMaintenance.TruncateTable<AppMenu>();
+        SSC.Db.InsertNav(menus).Include(it => it.Children).ThenInclude(z1 => z1.Children).ExecuteCommand();
+        mes = "更新菜单成功";
+    }
+
+    //模块数据更新
+    private void SysModulInit()
+    {
+        var Db = new SqlClient().Db;
+
+        // 初始化表结构
+        Db.CodeFirst.InitTables(
+            typeof(SystemBusinessModule)
+        );
+        try
+        {
+            // ====================== 2. 自动建表（首次执行运行，后续可注释） ======================
+            Db.CodeFirst.InitTables<SystemBusinessModule>();
+            Console.WriteLine("表结构初始化完成");
+
+            // ====================== 3. 构造所有要插入的系统数据 ======================
+            var systemList = new List<SystemBusinessModule>
+            {
+                new SystemBusinessModule
+                {
+                    Code = "PSI",
+                    Name = "进销存系统",
+                    Abbreviation = "PSI",
+                    FullEnglishName = "Purchase-Sales-Inventory System",
+                    Description = "采购管理、库存管控、出入库单据、库存报表",
+                    Remark = "最主流、对应进销存三个核心模块的通用缩写，全流程场景通用，行业辨识度最高；部分侧重库存/销售的场景也会用ISMS（Inventory and Sales Management System）",
+                    Icon = "shop",
+                    Style = "font-size:64px;color:#1890ff;margin-bottom:16px",
+                    SortOrder = 1
+                },
+                new SystemBusinessModule
+                {
+                    Code = "PMS",
+                    Name = "采购系统",
+                    Abbreviation = "PMS",
+                    FullEnglishName = "Procurement Management System",
+                    Description = "存货管理、采购审批、供应商管理、订单管理",
+                    Remark = "完整采购管理系统的标准缩写；部分场景也会用PRS（Procurement System），如果仅指采购订单模块可用PO（Purchase Order）",
+                    Icon = "shopping-cart",
+                    Style = "font-size:64px;color:#faad14;margin-bottom:16px",
+                    SortOrder = 2,
+                    IsEnabled = false // 采购系统暂时不启用，后续根据需求再开放
+                },
+                new SystemBusinessModule
+                {
+                    Code = "IMS",
+                    Name = "库存系统",
+                    Abbreviation = "IMS",
+                    FullEnglishName = "Inventory Management System",
+                    Description = "出入库管理、仓库调拨、库存盘点、库存结账",
+                    Remark = "侧重库存台账、出入库、盘点等库存数据管理的通用缩写；注意和WMS（Warehouse Management System，仓储管理系统，侧重仓库现场作业、库位/拣货等执行层流程）区分",
+                    Icon = "database",
+                    Style = "font-size:64px;color:#faad14;margin-bottom:16px",
+                    SortOrder = 3,
+                    IsEnabled = false // 库存系统暂时不启用，后续根据需求再开放
+
+                },
+                new SystemBusinessModule
+                {
+                    Code = "SMS",
+                    Name = "销售系统",
+                    Abbreviation = "SMS",
+                    FullEnglishName = "Sales Management System",
+                    Description = "客户管理、销售订单、业绩统计、回款跟踪",
+                    Style = "font-size:64px;color:#faad14;margin-bottom:16px",
+                    Remark = "销售全流程管理的标准缩写；如果侧重销售订单流转场景也会用OMS（Order Management System，订单管理系统）",
+                    Icon = "shopping-cart",
+                    SortOrder = 4
+                },
+                new SystemBusinessModule
+                {
+                    Code = "HR",
+                    Name = "人事管理系统",
+                    Abbreviation = "HR",
+                    Description = "员工档案、考勤薪资、招聘管理、组织架构",
+                    FullEnglishName = "Human Resources Management System",
+                    Remark = "企业人力资源管理的标准缩写，覆盖员工档案、考勤薪资、招聘管理、组织架构等功能；适用于各类企业的人力资源管理场景",
+                    Icon = "team",
+                    Style = "font-size:64px;color:#52c41a;margin-bottom:16px",
+                    SortOrder = 5
+                },
+                new SystemBusinessModule
+                {
+                    Code = "EAM",
+                    Name = "资产管理系统",
+                    Abbreviation = "EAM",
+                    FullEnglishName = "Enterprise Asset Management",
+                    Description = "资产台账、领用归还、维保记录、资产盘点",
+                    Remark = "企业级高价值资产（设备、厂房、车辆、无形资产等）全生命周期管理的标准缩写，覆盖资产台账、运维计划、故障追溯、效能分析、折旧核算全流程；重资产行业通用，轻量化运维场景也会用CMMS",
+                    Icon = "desktop",
+                    Style = "font-size:64px;color:#722ed1;margin-bottom:16px",
+                    SortOrder = 6
+                },
+                new SystemBusinessModule
+                {
+                    Code = "FMS",
+                    Name = "财务系统",
+                    Abbreviation = "FMS",
+                    FullEnglishName = "Financial Management System",
+                    Description = "凭证管理、应收应付、财务报表、预算管控",
+                    Style = "font-size:64px;color:#f5222d;margin-bottom:16px",
+                    Remark = "专业财务管理系统的通用缩写，比ERP自带的基础财务模块覆盖更深，包含总账核算、预算管控、资金池管理、成本分析、税务合规、多准则报表生成等功能；集团企业、上市公司核心业务系统",
+                    Icon = "account-book",
+                    SortOrder = 7
+                },
+                new SystemBusinessModule
+                {
+                    Code = "EMS",
+                    Name = "工程能耗管理系统",
+                    Abbreviation = "EMS",
+                    FullEnglishName = "Energy Management System",
+                    Description = "项目管理、进度跟踪、工单管理、物料核算",
+                    Style = "font-size:64px;color:#13c2c2;margin-bottom:16px",
+                    Remark = "面向工业工程、工厂、园区、建筑的能耗（水、电、气、热等）全流程管理标准缩写，覆盖能耗数据采集、实时监测、能效分析、节能优化、碳排放核算等功能；高能耗行业通用",
+                    Icon = "tool",
+                    SortOrder = 8
+                }
+            };
+
+            // ====================== 4. 去重批量插入（仅插入不存在的缩写） ======================
+            Db.DbMaintenance.TruncateTable<SystemBusinessModule>();
+
+            var existsAbbrs = Db.Queryable<SystemBusinessModule>().Select(it => it.Abbreviation).ToList();
+            var waitInsertList = systemList.Where(it => !existsAbbrs.Contains(it.Abbreviation)).ToList();
+
+            if (waitInsertList.Any())
+            {
+
+                var insertCount = Db.Insertable(waitInsertList).ExecuteCommand();
+                Console.WriteLine($"插入成功，共新增 {insertCount} 条系统数据");
+            }
+            else
+            {
+                Console.WriteLine("所有系统数据已存在，无需重复插入");
+            }
+
+            // ====================== 5. 验证插入结果 ======================
+            var allData = Db.Queryable<SystemBusinessModule>().OrderBy(it => it.SortOrder).ToList();
+            Console.WriteLine("\n当前表内所有系统数据：");
+            foreach (var item in allData)
+            {
+                Console.WriteLine($"{item.SortOrder}. {item.Name} ({item.Abbreviation})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"操作失败：{ex.Message}");
+        }
+    }
+    //菜单数据更新
+    private void AddMenuList()
+    {
+        List<AppMenu> menus = new List<AppMenu> {
+        // ===================== 公共模块（所有业务模块都显示）=====================
+        new AppMenu
+        {
+            Code =  "Login1st",
+            Path = "/login",
+            Name = "登录",
+            Key = "Login",
+            Icon = "login",
+            ParentId = 0,
+            PermissionKey = "*",
+            Module = "Common" // ✅ 新增：公共模块
+        },
+        new AppMenu
+        {
+            Code = "Home",
+            Path = "/",
+            Name = "首页",
+            Key = "home",
+            Icon = "home",
+            ParentId = 0,
+            PermissionKey = "menu:view:home",
+            Module = "Common" // ✅ 新增：公共模块
+        },
+        new AppMenu
+        {
+            Code = "Counter",
+            Path = "/counter",
+            Name = "Counter",
+            Key = "counter",
+            Icon = "menu-unfold",
+            ParentId = 0,
+            PermissionKey = "*",
+            Module = "Common" // ✅ 新增：公共模块
+        },
+        // ===================== 进销存模块（仅选择进销存时显示）=====================
+        new AppMenu
+        {
+            Code = "Purchase",
+            Path = "/PrNew",
+            Name = "采购",
+            Key = "PurchaseRequisitions",
+            Icon = "shopping-cart",
+            ParentId = 0,
+            PermissionKey = "menu:view:purchase",
+            Module = "Inventory", // ✅ 新增：归进销存模块
+            Children = new List<AppMenu> {
+                new AppMenu{
+                    Code = "PrNew",
+                    Path = "/PrNew",
+                    Name = "新建采购单",
+                    Key = "Pr.New",
+                    Icon = "plus-square",
+                    PermissionKey = "purchase:create",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "PrRecords",
+                    Path = "/PrRecords",
+                    Name = "采购记录",
+                    Key = "PrRecords",
+                    Icon = "unordered-list",
+                    PermissionKey = "purchase:view",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "PrApproval",
+                    Path = "/PrApproval",
+                    Name = "采购审批",
+                    Key = "PrApproval",
+                    Icon = "unordered-list",
+                    PermissionKey = "purchase:approve",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "PoRecords",
+                    Path = "/PoRecords",
+                    Name = "采购订单",
+                    Key = "PoRecords",
+                    Icon = "unordered-list",
+                    PermissionKey = "purchase:order:view",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "RNRecords",
+                    Path = "/RNRecords",
+                    Name = "收货单",
+                    Key = "RNRecords",
+                    Icon = "unordered-list",
+                    PermissionKey = "inventory:receive:view",
+                    Module = "Inventory"
+                }
+            }
+        },
+        new AppMenu
+        {
+            Code = "inventory",
+            Path = "/inventory_new",
+            Name = "库存",
+            Key = "IcAdd",
+            Icon = "appstore",
+            ParentId = 0,
+            PermissionKey = "menu:view:inventory",
+            Module = "Inventory", // ✅ 新增：归进销存模块
+            Children = new List<AppMenu> {
+                new AppMenu{
+                    Code = "inventory_new",
+                    Path = "/inventory_new",
+                    Name = "库存收发",
+                    Key = "icadd.icadd",
+                    Icon = "plus-square",
+                    PermissionKey = "inventory:manage",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "inventory_records",
+                    Path = "/inventory_records",
+                    Name = "库存记录",
+                    Key = "inventory_records",
+                    Icon = "unordered-list",
+                    PermissionKey = "inventory:view",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "balance",
+                    Path = "/inventory-balance",
+                    Name = "库存结余",
+                    Key = "inventory-balance",
+                    Icon = "menu-unfold",
+                    PermissionKey = "inventory:balance:view",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "stocktake",
+                    Path = "/inventory-stocktake",
+                    Name = "库存盘点",
+                    Key = "inventory-stocktake",
+                    Icon = "menu-unfold",
+                    HideChildrenInMenu = true,
+                    PermissionKey = "inventory:stocktake",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "MonthlyClosing",
+                    Path = "/inventory-MonthlyClosing",
+                    Name = "库存结账",
+                    Key = "inventory-MonthlyClosing",
+                    Icon = "issues-close",
+                    HideChildrenInMenu = true,
+                    PermissionKey = "inventory:monthlyclosing",
+                    Module = "Inventory"
+                },
+                new AppMenu{
+                    Code = "inventory_report",
+                    Path = "/inventory-report/inventory_stock_summary",
+                    Name = "库存报表",
+                    Key = "inventory-report",
+                    Icon = "table",
+                    PermissionKey = "inventory:report",
+                    Module = "Inventory",
+                    Children = new List<AppMenu>{
+                        new AppMenu{
+                            Code = "inventory_stock_summary",
+                            Path = "/inventory-report/inventory_stock_summary",
+                            Name = "收发存汇总表",
+                            Key = "inventory_stock_summary",
+                            Icon = "issues-close",
+                            HideChildrenInMenu = true,
+                            PermissionKey = "inventory:report:inventory_stock_summary",
+                            Module = "Inventory"
+                        },
+                        new AppMenu{
+                            Code = "inventory_flow",
+                            Path = "/inventory-report/inventory_flow",
+                            Name = "出入库流水帐",
+                            Key = "inventory_flow",
+                            Icon = "issues-close",
+                            HideChildrenInMenu = true,
+                            PermissionKey = "inventory:report:inventory_flow",
+                            Module = "Inventory"
+                        }
+                    }
+                }
+            }
+        },
+        new AppMenu
+        {
+            Code = "sales_center",
+            Path = "/sales",
+            Name = "销售中心",
+            Key = "sales_center",
+            Icon = "shopping",
+            ParentId = 0,
+            PermissionKey = "menu:view:sales_center",
+            Module = "Inventory", // ✅ 新增：归进销存模块
+            Children = new List<AppMenu>
+            {
+                new AppMenu
+                {
+                    Code = "sales_products",
+                    Path = "/sales/products",
+                    Name = "商品列表",
+                    Key = "sales_products",
+                    Icon = "appstore",
+                    PermissionKey = "sales:products:view",
+                    HideChildrenInMenu = true,
+                    Module = "Inventory"
+                },
+                new AppMenu
+                {
+                    Code = "sales_cart",
+                    Path = "/sales/cart",
+                    Name = "购物车",
+                    Key = "sales_cart",
+                    Icon = "shopping-cart",
+                    PermissionKey = "sales:cart:view",
+                    HideChildrenInMenu = true,
+                    Module = "Inventory"
+                },
+                new AppMenu
+                {
+                    Code = "sales_orders",
+                    Path = "/sales/orders",
+                    Name = "销售订单",
+                    Key = "sales_orders",
+                    Icon = "solution",
+                    PermissionKey = "sales:orders:view",
+                    HideChildrenInMenu = true,
+                    Module = "Inventory"
+                },
+                new AppMenu
+                {
+                    Code = "sales_shipments",
+                    Path = "/sales/shipments",
+                    Name = "发货列表",
+                    Key = "sales_shipments",
+                    Icon = "car",
+                    PermissionKey = "sales:shipments:view",
+                    HideChildrenInMenu = true,
+                    Module = "Inventory"
+                },
+                new AppMenu
+                {
+                    Code = "sales_reports",
+                    Path = "/sales/reports",
+                    Name = "销售报表",
+                    Key = "sales_reports",
+                    Icon = "pie-chart",
+                    PermissionKey = "sales:reports:view",
+                    HideChildrenInMenu = true,
+                    Module = "Inventory",
+                    Children = new List<AppMenu>
+                    {
+                        new AppMenu
+                        {
+                            Code = "sales_daily_report",
+                            Path = "/sales/reports/daily",
+                            Name = "日报表",
+                            Key = "sales_daily_report",
+                            Icon = "bar-chart",
+                            PermissionKey = "sales:reports:daily",
+                            Module = "Inventory"
+                        },
+                        new AppMenu
+                        {
+                            Code = "sales_customer_report",
+                            Path = "/sales/reports/customers",
+                            Name = "客户分析",
+                            Key = "sales_customer_report",
+                            Icon = "team",
+                            PermissionKey = "sales:reports:customers",
+                            Module = "Inventory"
+                        }
+                    }
+                }
+            }
+        },
+        // ===================== 新增：人事模块（仅选择人事管理时显示）=====================
+        new AppMenu
+        {
+            Code = "HR",
+            Path = "/hr/employee",
+            Name = "人事管理",
+            Key = "hr_center",
+            Icon = "team",
+            ParentId = 0,
+            PermissionKey = "menu:view:hr",
+            Module = "HR", // ✅ 归人事模块
+            Children = new List<AppMenu>
+            {
+                // 员工档案
+                new AppMenu
+                {
+                    Code = "hr_employee",
+                    Path = "/hr/employee",
+                    Name = "员工档案",
+                    Key = "hr.employee",
+                    Icon = "user",
+                    PermissionKey = "hr:employee:manage",
+                    Module = "HR"
+                },
+                // 组织架构
+                new AppMenu
+                {
+                    Code = "hr_department",
+                    Path = "/hr/department",
+                    Name = "组织架构",
+                    Key = "hr.department",
+                    Icon = "apartment",
+                    PermissionKey = "hr:department:manage",
+                    Module = "HR"
+                },
+                // 招聘管理
+                new AppMenu
+                {
+                    Code = "hr_recruitment",
+                    Path = "/hr/recruitment",
+                    Name = "招聘管理",
+                    Key = "hr.recruitment",
+                    Icon = "usergroup-add",
+                    PermissionKey = "hr:recruitment:view",
+                    Module = "HR",
+                    Children = new List<AppMenu>
+                    {
+                        new AppMenu
+                        {
+                            Code = "hr_recruitment_plan",
+                            Path = "/hr/recruitment/plan",
+                            Name = "招聘计划",
+                            Key = "hr.recruitment.plan",
+                            Icon = "schedule",
+                            PermissionKey = "hr:recruitment:plan",
+                            Module = "HR"
+                        },
+                        new AppMenu
+                        {
+                            Code = "hr_recruitment_candidate",
+                            Path = "/hr/recruitment/candidate",
+                            Name = "候选人管理",
+                            Key = "hr.recruitment.candidate",
+                            Icon = "profile",
+                            PermissionKey = "hr:recruitment:candidate",
+                            Module = "HR"
+                        }
+                    }
+                },
+                // 考勤管理
+                new AppMenu
+                {
+                    Code = "hr_attendance",
+                    Path = "/hr/attendance",
+                    Name = "考勤管理",
+                    Key = "hr.attendance",
+                    Icon = "calendar",
+                    PermissionKey = "hr:attendance:view",
+                    Module = "HR",
+                    Children = new List<AppMenu>
+                    {
+                        new AppMenu
+                        {
+                            Code = "hr_attendance_record",
+                            Path = "/hr/attendance/record",
+                            Name = "打卡记录",
+                            Key = "hr.attendance.record",
+                            Icon = "check-square",
+                            PermissionKey = "hr:attendance:record",
+                            Module = "HR"
+                        },
+                        new AppMenu
+                        {
+                            Code = "hr_attendance_leave",
+                            Path = "/hr/attendance/leave",
+                            Name = "请假审批",
+                            Key = "hr.attendance.leave",
+                            Icon = "edit",
+                            PermissionKey = "hr:attendance:leave",
+                            Module = "HR"
+                        }
+                    }
+                },
+                // 薪资管理
+                new AppMenu
+                {
+                    Code = "hr_salary",
+                    Path = "/hr/salary",
+                    Name = "薪资管理",
+                    Key = "hr.salary",
+                    Icon = "money-collect",
+                    PermissionKey = "hr:salary:manage",
+                    Module = "HR",
+                    Children = new List<AppMenu>
+                    {
+                        new AppMenu
+                        {
+                            Code = "hr_salary_calculate",
+                            Path = "/hr/salary/calculate",
+                            Name = "薪资核算",
+                            Key = "hr.salary.calculate",
+                            Icon = "calculator",
+                            PermissionKey = "hr:salary:calculate",
+                            Module = "HR"
+                        },
+                        new AppMenu
+                        {
+                            Code = "hr_salary_record",
+                            Path = "/hr/salary/record",
+                            Name = "工资条",
+                            Key = "hr.salary.record",
+                            Icon = "file-text",
+                            PermissionKey = "hr:salary:record",
+                            Module = "HR"
+                        }
+                    }
+                },
+                // 人事异动
+                new AppMenu
+                {
+                    Code = "hr_transfer",
+                    Path = "/hr/transfer",
+                    Name = "人事异动",
+                    Key = "hr.transfer",
+                    Icon = "swap",
+                    PermissionKey = "hr:transfer:view",
+                    Module = "HR"
+                },
+                // 人事报表
+                new AppMenu
+                {
+                    Code = "hr_report",
+                    Path = "/hr/report",
+                    Name = "人事报表",
+                    Key = "hr.report",
+                    Icon = "bar-chart",
+                    PermissionKey = "hr:report:view",
+                    Module = "HR",
+                    Children = new List<AppMenu>
+                    {
+                        new AppMenu
+                        {
+                            Code = "hr_report_employee",
+                            Path = "/hr/report/employee",
+                            Name = "员工花名册",
+                            Key = "hr.report.employee",
+                            Icon = "idcard",
+                            PermissionKey = "hr:report:employee",
+                            Module = "HR"
+                        },
+                        new AppMenu
+                        {
+                            Code = "hr_report_attendance",
+                            Path = "/hr/report/attendance",
+                            Name = "考勤报表",
+                            Key = "hr.report.attendance",
+                            Icon = "line-chart",
+                            PermissionKey = "hr:report:attendance",
+                            Module = "HR"
+                        },
+                        new AppMenu
+                        {
+                            Code = "hr_report_salary",
+                            Path = "/hr/report/salary",
+                            Name = "薪资报表",
+                            Key = "hr.report.salary",
+                            Icon = "account-book",
+                            PermissionKey = "hr:report:salary",
+                            Module = "HR"
+                        }
+                    }
+                }
+            }
+        },
+        // ===================== 系统设置（公共模块，所有场景都显示）=====================
+        new AppMenu
+        {
+            Code = "Setting",
+            Path = "/initialize",
+            Name = "设置",
+            Key = "setting",
+            Icon = "setting",
+            ParentId = 0,
+            PermissionKey = "menu:view:setting",
+            Module = "Common", // ✅ 新增：公共模块
+            Children = new List<AppMenu> {
+                new AppMenu{
+                    Code = "Init",
+                    Path = "/initialize",
+                    Name = "初始化",
+                    Key = "setting-initialize",
+                    Icon = "setting",
+                    PermissionKey = "system:initialize",
+                    Module = "Common"
+                },
+                new AppMenu{
+                    Code = "Login",
+                    Path = "/login",
+                    Name = "登录",
+                    Key = "setting-login",
+                    Icon = "login",
+                    PermissionKey = "",
+                    Module = "Common"
+                },
+                new AppMenu{
+                    Code = "Dept",
+                    Path = "/department-management",
+                    Name = "部门设置",
+                    Key = "setting-dept",
+                    Icon = "deployment-unit",
+                    PermissionKey = "system:dept:manage",
+                    Module = "Common"
+                },
+                new AppMenu{
+                    Code = "Users",
+                    Path = "/user-management",
+                    Name = "用户管理",
+                    Key = "setting-user",
+                    Icon = "team",
+                    PermissionKey = "system:User:manage",
+                    Module = "Common"
+                },
+                new AppMenu{
+                    Code = "Roles",
+                    Path = "/role-management",
+                    Name = "角色权限",
+                    Key = "setting-roles",
+                    Icon = "control",
+                    PermissionKey = "system:role:manage",
+                    Module = "Common"
+                },
+                new AppMenu{
+                    Code = "Permissions",
+                    Path = "/permission-management",
+                    Name = "功能管理",
+                    Key = "setting-permissions",
+                    Icon = "function",
+                    PermissionKey = "system:permissions:manage",
+                    Module = "Common"
+                },
+                new AppMenu{
+                    Code = "测试一",
+                    Path = "/temp",
+                    Name = "测试",
+                    Key = "setting-temp",
+                    Icon = "folder",
+                    PermissionKey = "*",
+                    Module = "Common"
+                },
+                new AppMenu{
+                        Code = "测试二",
+                        Path = "/temp2",
+                        Name = "测试",
+                        Key = "setting-temp2",
+                        Icon = "folder",
+                        PermissionKey = "*",
+                        Module = "Common"
+                    },
+                new AppMenu{
+                    Code = "Picc",
+                    Path = "/category-management",
+                    Name = "采购库存",
+                    Key = "setting-POandIC",
+                    Icon = "shopping-cart",
+                    PermissionKey = "system:config",
+                    Module = "Common",
+                    Children = new List<AppMenu> {
+                        new AppMenu{
+                            Code = "category",
+                            Path = "/category-management",
+                            Name = "存货分类",
+                            Key = "setting-category",
+                            Icon = "folder",
+                            PermissionKey = "inventory:category:manage",
+                            Module = "Common"
+                        },
+                        new AppMenu{
+                            Code = "Inventoryitem",
+                            Path = "/inventoryitem",
+                            Name = "存货档案",
+                            Key = "inventoryitem",
+                            Icon = "folder",
+                            PermissionKey = "inventory:item:manage",
+                            Module = "Common"
+                        },
+                        new AppMenu{
+                            Code = "Warehouse",
+                            Path = "/warehouse",
+                            Name = "仓库档案",
+                            Key = "warehouse",
+                            Icon = "folder",
+                            PermissionKey = "inventory:warehouse:manage",
+                            Module = "Common"
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+        SqlClient SSC = new SqlClient();
+        SSC.Db.DbMaintenance.TruncateTable<AppMenu>();
+        // 递归插入所有层级菜单（支持3层子菜单，和你原有逻辑完全一致）
+        SSC.Db.InsertNav(menus).Include(it => it.Children).ThenInclude(z1 => z1.Children).ExecuteCommand();
+        mes = "更新菜单成功（已新增人事模块+模块字段分类）";
+    }
+
+    //权限表数据更新
+    private void AddPermissions()
+    {
+        var permissions = new List<Permission>
+        {
+            // 菜单权限
+            new() { PermissionKey = "menu:view:home", Description = "首页菜单查看权限" },
+            new() { PermissionKey = "menu:view:purchase", Description = "采购菜单查看权限" },
+            new() { PermissionKey = "menu:view:inventory", Description = "库存菜单查看权限" },
+            new() { PermissionKey = "menu:view:setting", Description = "设置菜单查看权限" },
+
+            // 采购模块权限
+            new() { PermissionKey = "purchase:create", Description = "创建采购申请权限" },
+            new() { PermissionKey = "purchase:view", Description = "查看采购信息权限" },
+            new() { PermissionKey = "purchase:approve", Description = "采购审批权限" },
+            new() { PermissionKey = "purchase:order:view", Description = "查看采购订单权限" },
+            new() { PermissionKey = "inventory:receive:view", Description = "查看物料接收权限" },
+
+            // 库存模块权限
+            new() { PermissionKey = "inventory:manage", Description = "库存管理权限" },
+            new() { PermissionKey = "inventory:view", Description = "库存查看权限" },
+            new() { PermissionKey = "inventory:balance:view", Description = "查看库存余额权限" },
+            new() { PermissionKey = "inventory:stocktake", Description = "库存盘点权限" },
+
+            // 系统设置权限
+            new() { PermissionKey = "system:initialize", Description = "系统初始化权限" },
+            new() { PermissionKey = "system:dept:manage", Description = "部门管理权限" },
+            new() { PermissionKey = "system:User:manage", Description = "用户管理权限" },
+            new() { PermissionKey = "system:role:manage", Description = "角色权限管理" },
+            new() { PermissionKey = "system:permissions:manage", Description = "功能管理权限" },
+            new() { PermissionKey = "system:config", Description = "系统配置权限" },
+
+            // 采购库存子权限
+            new() { PermissionKey = "inventory:category:manage", Description = "库存分类管理权限" },
+            new() { PermissionKey = "inventory:item:manage", Description = "库存物料管理权限" },
+            new() { PermissionKey = "inventory:warehouse:manage", Description = "仓库管理权限" },
+
+            // 按钮权限
+            new() { PermissionKey = "button:prview:refresh", Description = "采购申请页面-刷新按钮" },
+            new() { PermissionKey = "button:prview:edit", Description = "采购申请页面-编辑按钮" },
+            new() { PermissionKey = "button:prview:submit", Description = "采购申请页面-提交按钮" },
+            new() { PermissionKey = "button:prview:approve", Description = "采购申请页面-审批按钮" },
+            new() { PermissionKey = "button:prview:reject", Description = "采购申请页面-拒绝按钮" },
+            new() { PermissionKey = "button:prview:createpo", Description = "采购申请页面-创建订单按钮" },
+            new() { PermissionKey = "button:prview:print", Description = "采购申请页面-打印按钮" }
+        };
+
+        var sqlClient = new SqlClient();
+
+        // 清空并重建权限表
+        sqlClient.Db.DbMaintenance.TruncateTable<Permission>();
+        sqlClient.Db.Insertable(permissions).ExecuteCommand();
+    }
+    //全部数据
+    private void UpdateSetting()
+    {
+        SqlClient SSC = new SqlClient();
+
+        List<TrxGroup> TrxGroups = new List<TrxGroup>()
+            {
+                new TrxGroup() { Code = "I01", Name = "期初入库", TrxType = 1 },
+                new TrxGroup() { Code = "I02", Name = "采购入库", TrxType = 1 },
+                new TrxGroup() { Code = "I03", Name = "盘盈入库", TrxType = 1 },
+                new TrxGroup() { Code = "I09", Name = "其他入库", TrxType = 1 },
+                new TrxGroup() { Code = "O01", Name = "销售出库", TrxType = -1 },
+                new TrxGroup() { Code = "O02", Name = "领料出库", TrxType = -1 },
+                new TrxGroup() { Code = "O03", Name = "盘亏出库", TrxType = -1 },
+                new TrxGroup() { Code = "O04", Name = "其他出库", TrxType = -1 },
+                new TrxGroup() { Code = "Z01", Name = "直入直出", TrxType = 0 }
+            };
+        SSC.Db.Insertable(TrxGroups).ExecuteCommand();
+
+        List<Category> Categorys = new List<Category>()
+        {
+            new Category(){Code = "00",Name = "未知分类" },
+            new Category(){Code = "01",Name = "新鲜蔬菜" },
+            new Category(){Code = "02",Name = "新鲜水果" },
+            new Category(){Code = "03",Name = "新鲜肉类" },
+            new Category(){Code = "04",Name = "新鲜水产" },
+            new Category(){Code = "05",Name = "禽蛋类" },
+            new Category(){Code = "06",Name = "冻品类" },
+            new Category(){Code = "07",Name = "干货" },
+            new Category(){Code = "08",Name = "酒水饮料" },
+            new Category(){Code = "09",Name = "烟草类" },
+            new Category(){Code = "99",Name = "其他" }
+
+        };
+        SSC.Db.Insertable(Categorys).ExecuteCommand();
+
+        List<Warehouse> Warehouses = new List<Warehouse>()
+        {
+            new Warehouse(){Code = "Z01", Name = "总仓" },
+            new Warehouse(){Code = "K01", Name = "客房" },
+            new Warehouse(){Code = "C01", Name = "餐饮" }
+        };
+        SSC.Db.Insertable(Warehouses).ExecuteCommand();
+
+        List<Department> Departments = new List<Department>()
+        {
+            new Department(){Code = "01",Name = "综合部" },
+            new Department(){Code = "02",Name = "财务" },
+            new Department(){Code = "0201",Name = "财务",Superior = 02},
+            new Department(){Code = "0202",Name = "采购" },
+            new Department(){Code = "0203",Name = "库管" },
+            new Department(){Code = "03",Name = "客房" },
+            new Department(){Code = "99",Name = "其他" }
+        };
+        SSC.Db.Insertable(Departments).ExecuteCommand();
+
+        List<InventoryCostingMethod> InventoryCostingMethods = SSC.Db.Queryable<InventoryCostingMethod>().ToList();
+        if (InventoryCostingMethods.Count == 0)
+        {
+            InventoryCostingMethods = new List<InventoryCostingMethod>()
+            {
+                new InventoryCostingMethod(){Code = "FIFO",Name = "先进先出法",Note = "First-in, first-out" },
+                new InventoryCostingMethod(){Code = "LIFO",Name = "后进先出法",Note = "Lost-in, first-out" },
+                new InventoryCostingMethod(){Code = "MA",Name = "移动平均法",Note = "Moving average"},
+                new InventoryCostingMethod(){Code = "WA",Name = "加权平均法",Note = "Weighted average"}
+            };
+            SSC.Db.Insertable(InventoryCostingMethods).ExecuteCommand();
+        }
+        List<MenuList> menus = new List<MenuList> {
+                new MenuList
+                {
+                    Code = "Home",
+                    Path = "/",
+                    Name = "Home",
+                    Key = "home",
+                    Icon = "home",
+                    ParentId = 0
+
+                },
+                new MenuList
+                {
+                    Code = "采购",
+                    Path = "/PrNew",
+                    Name = "采购",
+                    Key = "PurchaseRequisitions",
+                    Icon = "menu-unfold",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "新建采购单",
+                            Path = "/PrNew",
+                            Name = "库存收发",
+                            Key = "Pr.New",
+                            Icon = "plus-square"
+                        },
+                        new MenuList{
+                            Code = "采购记录",
+                            Path = "/PrRecords",
+                            Name = "采购记录",
+                            Key = "PrRecords",
+                            Icon = "unordered-list"
+                        }
+                    ]
+                },
+                new MenuList
+                {
+                    Code = "库存",
+                    Path = "/icadd",
+                    Name = "库存",
+                    Key = "IcAdd",
+                    Icon = "menu-unfold",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "库存收发",
+                            Path = "/icadd",
+                            Name = "库存收发",
+                            Key = "icadd.icadd",
+                            Icon = "plus-square"
+                        },
+                        new MenuList{
+                            Code = "库存记录",
+                            Path = "/inventory_records",
+                            Name = "库存记录",
+                            Key = "inventory_records",
+                            Icon = "unordered-list"
+                        },
+                        new MenuList{
+                            Code = "库存结余",
+                            Path = "/inventory-balance",
+                            Name = "库存结余",
+                            Key = "inventory-balance",
+                            Icon = "menu-unfold"
+                        },
+                        new MenuList{
+                            Code = "库存盘点",
+                            Path = "/inventory-stocktake",
+                            Name = "库存盘点",
+                            Key = "inventory-stocktake",
+                            Icon = "menu-unfold",
+                            HideChildrenInMenu = true
+                        }
+                    ]
+                },
+                new MenuList
+                {
+                    Code = "Counter",
+                    Path = "/counter",
+                    Name = "Counter",
+                    Key = "counter",
+                    Icon = "menu-unfold",
+                    ParentId = 0
+                },
+                new MenuList
+                {
+                    Code = "设置",
+                    Path = "/initialize",
+                    Name = "设置",
+                    Key = "setting",
+                    Icon = "setting",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "初始化",
+                            Path = "/initialize",
+                            Name = "初始化",
+                            Key = "initialize",
+                            Icon = "setting"
+                        },
+                        new MenuList{
+                            Code = "存货分类",
+                            Path = "/category",
+                            Name = "存货分类",
+                            Key = "category",
+                            Icon = "folder"
+                        },
+                        new MenuList{
+                            Code = "存货档案",
+                            Path = "/invlist",
+                            Name = "存货档案",
+                            Key = "invlist",
+                            Icon = "folder"
+                        },
+                        new MenuList{
+                            Code = "仓库档案",
+                            Path = "/warehouse",
+                            Name = "仓库档案",
+                            Key = "warehouse",
+                            Icon = "folder"
+                        }
+                    ]
+                }
+            };
+        SSC.Db.InsertNav(menus).Include(it => it.Children).ExecuteCommand();
+
+
+        Employee employee = new Employee()
+        {
+            Name = "采购负责人",
+            DepartmentCode = "01"
+        };
+
+        employee.EmployeeInit("");
+
+        User user = new User()
+        {
+            Name = "采购",
+            Password = "1",
+            Approval = "采购负责人,采购",
+            FeatureRole = "采购负责人,采购",
+            EmployeeCode = employee.Code
+        };
+        user.UserInit();
+        User user2 = new User()
+        {
+            Name = "Mark2",
+            Password = "123456",
+            Approval = "餐饮负责人",
+            FeatureRole = "餐饮负责人",
+            EmployeeCode = employee.Code
+        };
+        user2.UserInit();
+        // SSC.Db.Insertable(employee).ExecuteCommand();
+        // SSC.Db.Insertable(user).ExecuteCommand();
+        // SSC.Db.Insertable(user2).ExecuteCommand();
+
+        ApprovalNode approvalNode1 = new ApprovalNode("")
+        {
+            Role = "客房负责人",
+            StepNumber = 1,
+        };
+        ApprovalNode approvalNode12 = new ApprovalNode("")
+        {
+            Role = "餐饮负责人",
+            StepNumber = 1,
+        };
+        ApprovalNode approvalNode2 = new ApprovalNode("")
+        {
+            Role = "财务负责人",
+            StepNumber = 2,
+        };
+        ApprovalNode approvalNode3 = new ApprovalNode("")
+        {
+            Role = "酒店总经理",
+            StepNumber = 3,
+        };
+        ApprovalNode approvalNode4 = new ApprovalNode("")
+        {
+            Role = "采购负责人",
+            StepNumber = 4,
+        };
+
+        ApprovalType approvalType = new ApprovalType("")
+        {
+            Code = "PR03",
+            Decscription = "客房日常采购",
+            Type = DocumentType.PurchaseRequisition,
+            Nodes = [approvalNode1, approvalNode2, approvalNode3]
+        };
+
+        ApprovalType approvalType2 = new ApprovalType("")
+        {
+            Code = "PR04",
+            Decscription = "西厨房日常下单",
+            Type = DocumentType.PurchaseRequisition,
+            Nodes = [approvalNode12, approvalNode2, approvalNode3, approvalNode4]
+        };
+        SSC.Db.InsertNav(approvalType).Include(it => it.Nodes).ExecuteCommand();
+        SSC.Db.InsertNav(approvalType2).Include(it => it.Nodes).ExecuteCommand();
+
+        employee.EmployeeInit("");
+
+        user.UserInit();
+        SSC.Db.Insertable(user).ExecuteCommand();
+
+        mes = "添加数据成功";
+    }
+    //部分数据
+    private void insertintoDate()
+    {
+        var db = new SqlClient().Db;
+
+        db.DbMaintenance.TruncateTable<ApprovalRole>();
+        db.DbMaintenance.TruncateTable<UserApprovalRole>();
+        // 初始化审批角色
+        var approvalRoles = new List<ApprovalRole>
+        {
+            new ApprovalRole { Code = "DeptManager", Name = "部门经理", Description = "负责部门内单据一级审批", Sequence = 1 },
+            new ApprovalRole { Code = "FinanceManager", Name = "财务部负责人", Description = "负责费用、采购类单据财务审核", Sequence = 2 },
+            new ApprovalRole { Code = "PurchaseManager", Name = "采购部负责人", Description = "负责采购申请、订单类单据审批", Sequence = 3 },
+            new ApprovalRole { Code = "WarehouseManager", Name = "仓库负责人", Description = "负责出入库、盘点类单据审批", Sequence = 4 },
+            new ApprovalRole { Code = "WarehouseSupervisor", Name = "仓库主管", Description = "负责出入库、盘点类单据审批", Sequence = 5 },
+            new ApprovalRole { Code = "HRManager", Name = "人事部负责人", Description = "负责人事、请假、入职类单据审批", Sequence = 6 },
+            new ApprovalRole { Code = "GeneralManager", Name = "总经理", Description = "负责大额、特殊类单据最终审批", Sequence = 7 },
+            new ApprovalRole { Code = "HousekeepingManager", Name = "客房部负责人", Description = "负责客房部易耗品申领、设备报修、布草采购类单据审批", Sequence = 8 },
+            new ApprovalRole { Code = "FinanceSupervisor", Name = "财务主管", Description = "负责日常报销、小额付款、供应商对账类单据初审", Sequence = 9 },
+            new ApprovalRole { Code = "FBManager", Name = "餐饮负责人", Description = "负责餐饮部食材采购、活动预算、餐具采购类单据审批", Sequence = 10 },
+            new ApprovalRole { Code = "HeadChef", Name = "厨师长", Description = "负责食材申购、厨房设备报修、菜品成本调整类单据审批", Sequence = 11},
+            new ApprovalRole { Code = "FrontOfficeManager", Name = "前台负责人", Description = "负责房费调整、客人退款、OTA对账、入住优惠类单据审批", Sequence = 12 },
+            new ApprovalRole { Code = "SalesManager", Name = "销售负责人", Description = "负责销售合同、客户折扣、佣金结算、团队接待优惠类单据审批", Sequence = 13 },
+            new ApprovalRole { Code = "AdminDirector", Name = "综合部主任", Description = "负责行政采购、人事异动、办公费用、后勤维修类单据审批", Sequence = 14 }
+        };
+        db.Insertable(approvalRoles).ExecuteReturnIdentity();
+        approvalRoles = ApprovalRole.Select();
+        List<User> users = User.SelectIncUnActive();
+        // 初始化用户-审批角色关联示例
+        var userApprovalRoles = new List<UserApprovalRole>
+        {
+            // 给admin分配所有审批角色
+            new UserApprovalRole { UserId = users[0].Id, ApprovalRoleId = approvalRoles[0].Id },
+            new UserApprovalRole { UserId = users[0].Id, ApprovalRoleId = approvalRoles[1].Id },
+            new UserApprovalRole { UserId = users[0].Id, ApprovalRoleId = approvalRoles[2].Id },
+            // 给采购主管分配采购审批角色
+            new UserApprovalRole { UserId = users[1].Id, ApprovalRoleId = approvalRoles[2].Id },
+            // 给财务专员分配财务审批角色
+            new UserApprovalRole { UserId = users[4].Id, ApprovalRoleId = approvalRoles[1].Id }
+        };
+        db.Insertable(userApprovalRoles).ExecuteCommand();
+
+        mes = "添加数据成功";
+    }
+
+}

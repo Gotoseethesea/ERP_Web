@@ -1,0 +1,186 @@
+﻿@using AntDesign
+@using ERP_Web.Models.PrivilegeHub
+@inject MessageService MessageService
+
+<!-- 新增：在卡片头部加新增按钮 -->
+<Card Title="审批角色分配" Style="margin-bottom:16px">
+    <Extra>
+        <Button Type="ButtonType.Primary"
+                Icon="plus"
+                Size="ButtonSize.Small"
+                OnClick="ShowCreateModal">
+            新增审批角色
+        </Button>
+    </Extra>
+    <Body>
+        <Transfer TargetKeys="_assignedApprovalRoleIds"
+                    SelectedKeys="_selectedApprovalRoleIds"
+                    DataSource="@_approvalRoleOptions"
+                    Titles="@(new[] { "可用审批角色", "已分配审批角色" })"
+                    Render="@(role => role.Title)"
+                    OnChange="OnApprovalRolesChanged">
+        </Transfer>
+
+        <div style="margin-top: 16px; text-align: right;">
+            <Button Type="ButtonType.Primary"
+                    Icon="save"
+                    OnClick="SaveApprovalRoles"
+                    Loading="@_isSaving">
+                保存审批权限
+            </Button>
+        </div>
+    </Body>
+</Card>
+
+<Card Title="审批权限预览">
+    @if (_assignedApprovalRoles.Any())
+    {
+        <AntList DataSource="@_assignedApprovalRoles" Bordered>
+            <ChildContent Context="role">
+                <ListItem>
+                    <Tag Color="TagColor.Green">@role.Name</Tag>
+                    <span style="margin-left: 8px;">@role.Description</span>
+                </ListItem>
+            </ChildContent>
+        </AntList>
+    }
+    else
+    {
+        <div style="text-align: center; padding: 20px;">
+            <Empty Description=@("尚未分配任何审批角色") />
+        </div>
+    }
+</Card>
+
+<!-- 新增：新增审批角色模态框 -->
+<Modal @ref="_createModal"
+       Title="新增审批角色"
+       OnOk="CreateApprovalRole"
+       OnCancel="CloseCreateModal">
+    <Form Model="@_newApprovalRole" LabelColSpan="6" WrapperColSpan="18">
+        <FormItem Label="角色编码" Required>
+            <Input @bind-Value="@_newApprovalRole.Code" Placeholder="请输入角色唯一编码，如FinanceManager" />
+        </FormItem>
+        <FormItem Label="角色名称" Required>
+            <Input @bind-Value="@_newApprovalRole.Name" Placeholder="请输入角色名称，如财务部负责人" />
+        </FormItem>
+        <FormItem Label="角色描述">
+            <TextArea @bind-Value="@_newApprovalRole.Description" Placeholder="请输入角色职责描述，如负责费用类单据财务审核" Rows="3" />
+        </FormItem>
+        <FormItem Label="排序号">
+            <Input TValue="int?" @bind-Value="@_newApprovalRole.Sequence" />
+        </FormItem>
+    </Form>
+</Modal>
+
+@code {
+    [Parameter] public User User { get; set; }
+    [Parameter] public EventCallback OnApprovalsUpdated { get; set; }
+
+    private List<ApprovalRole> _allApprovalRoles = new();
+    private List<TransferItem> _approvalRoleOptions = new();
+    private List<string> _assignedApprovalRoleIds = new();
+    private List<string> _selectedApprovalRoleIds = new();
+    private bool _isSaving = false;
+
+    // ========== 新增变量 ==========
+    private Modal _createModal;
+    private ApprovalRole _newApprovalRole = new();
+    // ==============================
+
+    private IEnumerable<ApprovalRole> _assignedApprovalRoles =>
+        _allApprovalRoles.Where(r => _assignedApprovalRoleIds.Contains(r.Id.ToString()));
+
+    protected override void OnParametersSet()
+    {
+        if (User != null)
+        {
+            LoadApprovalRoles();
+        }
+    }
+
+    // ========== 新增：加载审批角色公共方法 ==========
+    private void LoadApprovalRoles()
+    {
+        // 从数据库读取所有启用的审批角色
+        _allApprovalRoles = ApprovalRole.Select();
+        // 转换为Transfer组件需要的格式
+        _approvalRoleOptions = _allApprovalRoles.Select(r => new TransferItem
+        {
+            Key = r.Id.ToString(),
+            Title = r.Name,
+            Description = r.Description
+        }).ToList();
+        // 读取用户已分配的审批角色ID
+        _assignedApprovalRoleIds = User.GetApprovalRoles().Select(r => r.Id.ToString()).ToList();
+    }
+    // ==============================================
+
+    private void OnApprovalRolesChanged(TransferChangeArgs transferChange)
+    {
+        _assignedApprovalRoleIds = transferChange.TargetKeys.ToList();
+        MessageService.Info("审批角色分配已更新，点击保存生效");
+    }
+
+    private async Task SaveApprovalRoles()
+    {
+        _isSaving = true;
+        try
+        {
+            var roleIds = _assignedApprovalRoleIds.Select(id => int.Parse(id)).ToList();
+            // 调用User的更新方法，走多对多关联
+            await User.UpdateApprovalRoles(roleIds);
+            
+            MessageService.Success("审批权限已保存", 2);
+            await OnApprovalsUpdated.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"保存失败: {ex.Message}", 3);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    // ========== 新增：新增审批角色相关方法 ==========
+    private void ShowCreateModal()
+    {
+        _newApprovalRole = new ApprovalRole()
+        {
+            Active = true,
+            Sequence = 100 // 默认排序号
+        };
+        _createModal.Visible = true;
+    }
+
+    private void CloseCreateModal()
+    {
+        _createModal.Visible = false;
+    }
+
+    private async Task CreateApprovalRole()
+    {
+        if (string.IsNullOrEmpty(_newApprovalRole.Code) || string.IsNullOrEmpty(_newApprovalRole.Name))
+        {
+            MessageService.Error("角色编码和名称不能为空");
+            return;
+        }
+
+        try
+        {
+            // 保存到数据库
+            _newApprovalRole.Insert();
+            MessageService.Success("审批角色新增成功");
+            CloseCreateModal();
+            // 重新加载角色列表，不用刷新页面，Transfer组件自动显示新增的角色
+            LoadApprovalRoles();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"新增失败: {ex.Message}");
+        }
+    }
+    // ==============================================
+}

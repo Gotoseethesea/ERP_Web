@@ -1,0 +1,114 @@
+﻿@page "/HR/HrTrxList"
+@rendermode InteractiveServer
+@inject MessageService MessageService
+@using ERP_Web.Repository
+@using ERP_Web.Models.HRMS
+@inject HrRepository HrRepo
+@inject NavigationManager NavigationManager
+@inject ConfirmService ConfirmService
+
+<PageTitle>人事异动单列表</PageTitle>
+
+<Row Gutter="16" Style="margin-bottom:16px">
+    <Col>
+        <Title Level="3">人事异动单管理</Title>
+    </Col>
+    <Col >
+        <Input Placeholder="搜索单据号/员工姓名" Style="width:300px" @bind-Value="_searchKey" />
+        <Select @bind-Value="_trxTypeFilter" TItemValue="int" TItem="int" Style="width:120px;margin-left:8px" Placeholder="异动类型">
+                <SelectOption Value="0">全部</SelectOption>
+                <SelectOption Value="1">入职</SelectOption>
+                <SelectOption Value="2">离职</SelectOption>
+                <SelectOption Value="3">调岗</SelectOption>
+                <SelectOption Value="4">调薪</SelectOption>
+                <SelectOption Value="5">转正</SelectOption>
+                <SelectOption Value="6">部门调动</SelectOption>
+        </Select>
+        <Select @bind-Value="_statusFilter" TItemValue="int" TItem="int"  Style="width:120px;margin-left:8px" Placeholder="审批状态">
+            <SelectOptions>
+                <SelectOption Value="0">全部</SelectOption>
+                <SelectOption Value="1">审批中</SelectOption>
+                <SelectOption Value="2">已通过</SelectOption>
+                <SelectOption Value="3">已驳回</SelectOption>
+            </SelectOptions>
+        </Select>
+        <Button Type="ButtonType.Primary" OnClick="LoadData" Style="margin-left:8px">搜索</Button>
+    </Col>
+    <Col>
+        <Button Type="ButtonType.Primary" OnClick="() => NavigateTo()">新增异动</Button>
+    </Col>
+</Row>
+
+@code{
+    private void NavigateTo()
+    {
+        NavigationManager.NavigateTo("/HR/HrTrxEdit");
+    }
+    private void NavigateToView(string code)
+    {
+        NavigationManager.NavigateTo($"/HR/HrTrxView/{code}");
+    }
+
+    private void NavigateToEdit(string code)
+    {
+        NavigationManager.NavigateTo($"/HR/HrTrxEdit/{code}");
+    }
+}
+
+<Table DataSource="@_trxList" TItem="HrTransaction" Loading="_loading" PageSize="20">
+    <PropertyColumn Property="c => c.Code" Title="单据号" Width="180" />
+    <PropertyColumn Property="c => c.TrxType" Title="异动类型" Width="100">
+        @(e => ((HrTrxTypeEnum)context.TrxType).ToString())
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Employee.Name" Title="员工姓名" Width="100" />
+    <PropertyColumn Property="c => c.EffectiveDate" Title="生效日期" Width="120" />
+    <PropertyColumn Property="c => c.ApprovalStatus" Title="审批状态" Width="100"  />
+    <PropertyColumn Property="c => c.Operator" Title="制单人" Width="100" />
+    <ActionColumn Title="操作" Width="220">
+        <Button Size="ButtonSize.Small" OnClick="() => NavigateToView(context.Code)">查看</Button>
+        <Button Size="ButtonSize.Small" OnClick="() => NavigateToEdit(context.Code)" Style="margin-left:4px" Disabled="@(context.ApprovalStatus >= 2)">编辑</Button>
+        <Button Size="ButtonSize.Small" OnClick="() => ApproveTrx(context)" Type="ButtonType.Default" Style="margin-left:4px" Disabled="@(context.ApprovalStatus !=1)">审批</Button>
+        <Button Size="ButtonSize.Small" OnClick="() => PrintTrx(context)" Style="margin-left:4px">打印</Button>
+    </ActionColumn>
+</Table>
+@code{
+
+}
+
+@code {
+    //Formatter="@(e => e.ApprovalStatus switch {1=>"审批中",2=>"已通过",3=>"已驳回",_=>"草稿"})"
+    private string _searchKey;
+    private int _trxTypeFilter = 0;
+    private int _statusFilter = 0;
+    private bool _loading;
+    private List<HrTransaction> _trxList = new();
+    private readonly HrRepository _hrRepo = new();
+
+    protected override void OnInitialized()
+    {
+        LoadData();
+    }
+
+    private void LoadData()
+    {
+        _loading = true;
+        _trxList = _hrRepo.GetHrTrxList(_searchKey, _trxTypeFilter == 0 ? null : _trxTypeFilter, _statusFilter == 0 ? null : _statusFilter);
+        _loading = false;
+    }
+
+    private async void ApproveTrx(HrTransaction trx)
+    {
+        var confirm = await ConfirmService.Show("审批确认", "确认审批通过该异动单？通过后将自动更新员工档案，不可撤销。", ConfirmButtons.YesNo);
+        if (confirm == ConfirmResult.Yes)
+        {
+            _hrRepo.ApproveHrTrx(trx.Code);
+            LoadData();
+            MessageService.Success("审批通过，员工档案已更新");
+        }
+    }
+
+    private void PrintTrx(HrTransaction trx)
+    {
+        // 复用你现有打印框架，直接传入异动单数据打印即可
+    }
+}

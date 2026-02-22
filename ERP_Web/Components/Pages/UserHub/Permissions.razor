@@ -1,0 +1,659 @@
+﻿@using ERP_Web.Core.Constants
+@using ERP_Web.Core.Service
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@inject IUserContext UserContext
+@page "/permissions"
+
+<h3>RoleSetting</h3>
+<Button OnClick="Initialize">插入菜单数据</Button>
+<Button OnClick="insertdata">插入数据</Button>
+
+@code {
+
+    protected override async Task OnInitializedAsync()
+    {
+    }
+    public void Initialize()
+    {
+        SqlClient SSC = new SqlClient();
+        MockDataGenerator.Initialize(SSC.Db);
+
+        // ==================== 2. 菜单数据优化 ====================
+        List<AppMenu> menus = new List<AppMenu> {
+            new AppMenu
+            {
+                Code =  "Login",
+                Path = "/",
+                Name = "登录",
+                Key = "Login",
+                Icon = "login",
+                ParentId = 0,
+                PermissionKey = "*" // 首页基础访问权限
+            },
+            new AppMenu
+            {
+                Code = "Home",
+                Path = "/",
+                Name = "Home",
+                Key = "home",
+                Icon = "home",
+                ParentId = 0,
+                PermissionKey = "menu:view:home" // 首页基础访问权限
+            },
+            new AppMenu
+            {
+                Code = "采购",
+                Path = "/PrNew",
+                Name = "采购",
+                Key = "PurchaseRequisitions",
+                Icon = "menu-unfold",
+                ParentId = 0,
+                PermissionKey = "menu:view:purchase", // 采购模块入口权限
+                Children = new List<AppMenu> {
+                    new AppMenu{
+                        Code = "新建采购单",
+                        Path = "/PrNew",
+                        Name = "新建采购单",
+                        Key = "Pr.New",
+                        Icon = "plus-square",
+                        PermissionKey = "purchase:create" // 采购单创建权限
+                    },
+                    new AppMenu{
+                        Code = "采购记录",
+                        Path = "/PrRecords",
+                        Name = "采购记录",
+                        Key = "PrRecords",
+                        Icon = "unordered-list",
+                        PermissionKey = "purchase:view" // 采购记录查看权限
+                    },
+                    new AppMenu{
+                        Code = "采购审批",
+                        Path = "/PrApproval",
+                        Name = "采购审批",
+                        Key = "PrApproval",
+                        Icon = "unordered-list",
+                        PermissionKey = "purchase:approve" // 采购审批权限
+                    },
+                    new AppMenu{
+                        Code = "采购订单",
+                        Path = "/PoRecords",
+                        Name = "采购订单",
+                        Key = "PoRecords",
+                        Icon = "unordered-list",
+                        PermissionKey = "purchase:order:view" // 订单查看权限
+                    },
+                    new AppMenu{
+                        Code = "收货单",
+                        Path = "/RNRecords",
+                        Name = "收货单",
+                        Key = "RNRecords",
+                        Icon = "unordered-list",
+                        PermissionKey = "inventory:receive:view" // 收货操作权限
+                    }
+                }
+            },
+            new AppMenu
+            {
+                Code = "库存",
+                Path = "/inventory_new",
+                Name = "库存",
+                Key = "IcAdd",
+                Icon = "menu-unfold",
+                ParentId = 0,
+                PermissionKey = "menu:view:inventory", // 库存模块入口权限
+                Children = new List<AppMenu> {
+                    new AppMenu{
+                        Code = "库存收发",
+                        Path = "/inventory_new",
+                        Name = "库存收发",
+                        Key = "icadd.icadd",
+                        Icon = "plus-square",
+                        PermissionKey = "inventory:manage" // 库存管理全权限
+                    },
+                    new AppMenu{
+                        Code = "库存记录",
+                        Path = "/inventory_records",
+                        Name = "库存记录",
+                        Key = "inventory_records",
+                        Icon = "unordered-list",
+                        PermissionKey = "inventory:view" // 库存记录查看权限
+                    },
+                    new AppMenu{
+                        Code = "库存结余",
+                        Path = "/inventory-balance",
+                        Name = "库存结余",
+                        Key = "inventory-balance",
+                        Icon = "menu-unfold",
+                        PermissionKey = "inventory:balance:view" // 结余查看权限
+                    },
+                    new AppMenu{
+                        Code = "库存盘点",
+                        Path = "/inventory-stocktake",
+                        Name = "库存盘点",
+                        Key = "inventory-stocktake",
+                        Icon = "menu-unfold",
+                        HideChildrenInMenu = true,
+                        PermissionKey = "inventory:stocktake" // 盘点操作权限
+                    }
+                }
+            },
+            new AppMenu
+            {
+                Code = "Counter",
+                Path = "/counter",
+                Name = "Counter",
+                Key = "counter",
+                Icon = "menu-unfold",
+                ParentId = 0,
+                PermissionKey = "" // 公开页面无需权限
+            },
+            new AppMenu
+            {
+                Code = "设置",
+                Path = "/initialize",
+                Name = "设置",
+                Key = "setting",
+                Icon = "setting",
+                ParentId = 0,
+                PermissionKey = "menu:view:setting", // 设置模块入口权限
+                Children = new List<AppMenu> {
+                    new AppMenu{
+                        Code = "初始化",
+                        Path = "/initialize",
+                        Name = "初始化",
+                        Key = "setting-initialize",
+                        Icon = "setting",
+                        PermissionKey = "system:initialize" // 系统初始化权限
+                    },
+                    new AppMenu{
+                        Code = "登录",
+                        Path = "/login",
+                        Name = "登录",
+                        Key = "setting-login",
+                        Icon = "folder",
+                        PermissionKey = "" // 登录页面公开
+                    },
+                    new AppMenu{
+                        Code = "登录",
+                        Path = "/login",
+                        Name = "登录",
+                        Key = "setting-login",
+                        Icon = "folder",
+                        PermissionKey = "" // 登录页面公开
+                    },
+                    new AppMenu{
+                        Code = "部门",
+                        Path = "/dept",
+                        Name = "部门",
+                        Key = "setting-dept",
+                        Icon = "folder",
+                        PermissionKey = "system:dept:manage" // 部门管理权限
+                    },
+                    new AppMenu{
+                        Code = "测试",
+                        Path = "/temp",
+                        Name = "测试",
+                        Key = "setting-temp",
+                        Icon = "folder",
+                        PermissionKey = "" // 测试页面公开
+                    },
+                    new AppMenu{
+                        Code = "采购库存",
+                        Path = "/category",
+                        Name = "采购库存",
+                        Key = "setting-POandIC",
+                        Icon = "folder",
+                        PermissionKey = "system:config", // 系统配置权限
+                        Children = new List<AppMenu> {
+                            new AppMenu{
+                                Code = "存货分类",
+                                Path = "/category",
+                                Name = "存货分类",
+                                Key = "setting-category",
+                                Icon = "folder",
+                                PermissionKey = "inventory:category:manage" // 分类管理权限
+                            },
+                            new AppMenu{
+                                Code = "存货档案",
+                                Path = "/inventoryitem",
+                                Name = "存货档案",
+                                Key = "inventoryitem",
+                                Icon = "folder",
+                                PermissionKey = "inventory:item:manage" // 存货管理权限
+                            },
+                            new AppMenu{
+                                Code = "仓库档案",
+                                Path = "/warehouse",
+                                Name = "仓库档案",
+                                Key = "warehouse",
+                                Icon = "folder",
+                                PermissionKey = "inventory:warehouse:manage" // 仓库管理权限
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        SSC.Db.DbMaintenance.TruncateTable<AppMenu>();
+
+        SSC.Db.InsertNav(menus).Include(it => it.Children).ThenInclude(z1 => z1.Children).ExecuteCommand();
+
+        // ==================== 3. 核心查询逻辑优化 ====================
+        // ✅ 获取用户权限集合 (从用户角色映射)
+        PermissionService permissionService = new PermissionService();
+        HashSet<string> userPermissions = permissionService.GetUserPermissions(UserContext.CurrentUser);
+
+        // ✅ 查询并构建菜单树
+        var menuTree = SSC.Db.Queryable<AppMenu>()
+            .Where(m => m.Active) // 只查询激活菜单
+            .OrderBy(m => m.Sequence) // 按顺序排序
+            .ToTree(
+                it => it.Children,
+                it => it.ParentId,
+                0,
+                it => it.Id
+            )
+            .ToList();
+
+        // ✅ 应用权限过滤并转换为前端格式
+        var result = AppMenu.CreateMenu(menuTree, userPermissions);
+    }
+    public void check(long userId)
+    {
+        // 测试输出
+        PrintUserPermissions(1); // admin
+        PrintUserPermissions(2); // purchase_manager
+        PrintUserPermissions(5); // finance_li
+    }
+
+
+    // ==================== 数据验证查询 ====================
+    public void PrintUserPermissions(long userId)
+    {
+        SqlClient SSC = new SqlClient();
+        var user = SSC.Db.Queryable<User>().InSingle(userId);
+        PermissionService permissionService = new PermissionService();
+        var permissions = permissionService.GetUserPermissions(user);
+
+        Console.WriteLine($"用户 [{user.Name}] 权限列表：");
+        foreach (var perm in permissions.OrderBy(p => p))
+        {
+            Console.WriteLine($"- {perm}");
+        }
+    }
+
+    public void insertdata()
+    {
+        // 测试输出
+        //ButtonPermissionInitializer buttonPermissionInitializer = new ButtonPermissionInitializer();
+        ButtonPermissionInitializer.Initialize(new SqlClient().Db);
+    }
+
+    // ==================== 模拟数据生成器 ====================
+    public class MockDataGenerator
+    {
+        public static void Initialize(SqlSugarClient db)
+        {
+            // 清空所有表（仅测试环境）
+            db.DbMaintenance.TruncateTable<User>();
+            db.DbMaintenance.TruncateTable<Role>();
+            db.DbMaintenance.TruncateTable<UserRole>();
+            db.DbMaintenance.TruncateTable<Permission>();
+            db.DbMaintenance.TruncateTable<RolePermission>();
+
+            // 1. 创建权限
+            var permissions = new List<Permission>
+            {
+                // 基础访问权限
+                new Permission { PermissionKey = "menu:view:home" },
+                new Permission { PermissionKey = "menu:view:purchase" },
+                new Permission { PermissionKey = "menu:view:inventory" },
+                new Permission { PermissionKey = "menu:view:setting" },
+
+                // 采购模块权限
+                new Permission { PermissionKey = "purchase:create" },
+                new Permission { PermissionKey = "purchase:view" },
+                new Permission { PermissionKey = "purchase:approve" },
+                new Permission { PermissionKey = "purchase:order:view" },
+                new Permission { PermissionKey = "inventory:receive:view" },
+
+                // 库存模块权限
+                new Permission { PermissionKey = "inventory:manage" },
+                new Permission { PermissionKey = "inventory:view" },
+                new Permission { PermissionKey = "inventory:balance:view" },
+                new Permission { PermissionKey = "inventory:stocktake" },
+
+                // 系统权限
+                new Permission { PermissionKey = "system:initialize" },
+                new Permission { PermissionKey = "system:dept:manage" },
+                new Permission { PermissionKey = "system:config" },
+                new Permission { PermissionKey = "inventory:category:manage" },
+                new Permission { PermissionKey = "inventory:item:manage" },
+                new Permission { PermissionKey = "inventory:warehouse:manage" }
+            };
+            db.Insertable(permissions).ExecuteCommand();
+            permissions = db.Queryable<Permission>().ToList();
+
+            // 2. 创建角色
+            var roles = new List<Role>
+            {
+                new Role { Code = "admin", Name = "系统管理员" },
+                new Role { Code = "Po", Name = "采购主管" },
+                new Role { Code = "Ic",  Name = "库存经理" },
+                new Role { Code = "emp",  Name = "普通员工" },
+                new Role { Code = "Fin",  Name = "财务专员" }
+            };
+            db.Insertable(roles).ExecuteCommand();
+            roles = db.Queryable<Role>().ToList();
+
+            // 3. 创建用户
+            var users = new List<User>
+            {
+                new User { Name = "admin" },
+                new User { Name = "purchase_manager" },
+                new User { Name = "inventory_supervisor" },
+                new User { Name = "staff_zhang" },
+                new User { Name = "finance_li" }
+            };
+            foreach (var u in users)
+            {
+                u.UserInit();
+            }
+            db.Insertable(users).ExecuteCommand();
+            users = db.Queryable<User>().ToList();
+
+            // 4. 角色-权限关联
+            var rolePermissions = new List<RolePermission>();
+        
+            // 系统管理员 - 所有权限
+            foreach (var perm in permissions)
+            {
+                rolePermissions.Add(new RolePermission {
+                    RoleId = roles[0].Id,
+                    PermissionId = perm.Id
+                });
+            }
+        
+            // 采购主管
+            var purchasePerms = permissions.Where(p => 
+                p.PermissionKey.StartsWith("menu:view") || 
+                p.PermissionKey.StartsWith("purchase:") ||
+                p.PermissionKey == "inventory:receive:view"
+            );
+            foreach (var perm in purchasePerms)
+            {
+                rolePermissions.Add(new RolePermission {
+                    RoleId = roles[1].Id,
+                    PermissionId = perm.Id
+                });
+            }
+        
+            // 库存经理
+            var inventoryPerms = permissions.Where(p => 
+                p.PermissionKey.StartsWith("menu:view") || 
+                p.PermissionKey.StartsWith("inventory:") ||
+                p.PermissionKey == "system:config"
+            );
+            foreach (var perm in inventoryPerms)
+            {
+                rolePermissions.Add(new RolePermission {
+                    RoleId = roles[2].Id,
+                    PermissionId = perm.Id
+                });
+            }
+        
+            // 普通员工 - 基础权限
+            rolePermissions.AddRange(new[]
+            {
+                new RolePermission { RoleId = roles[3].Id, PermissionId = permissions[0].Id }, // home
+                new RolePermission { RoleId = roles[3].Id, PermissionId = permissions[1].Id }, // purchase view
+                new RolePermission { RoleId = roles[3].Id, PermissionId = permissions[5].Id }  // purchase view
+            });
+        
+            // 财务专员
+            rolePermissions.AddRange(new[]
+            {
+                new RolePermission { RoleId = roles[4].Id, PermissionId = permissions[0].Id },  // home
+                new RolePermission { RoleId = roles[4].Id, PermissionId = permissions[1].Id },  // purchase view
+                new RolePermission { RoleId = roles[4].Id, PermissionId = permissions[5].Id },  // purchase view
+                new RolePermission { RoleId = roles[4].Id, PermissionId = permissions[7].Id },  // order view
+                new RolePermission { RoleId = roles[4].Id, PermissionId = permissions[10].Id }  // inventory view
+            });
+        
+            db.Insertable(rolePermissions).ExecuteCommand();
+
+            // 5. 用户-角色关联
+            var userRoles = new List<UserRole>
+            {
+                // 管理员拥有所有角色
+                new UserRole { UserId = users[0].Id, RoleId = roles[0].Id },
+                new UserRole { UserId = users[0].Id, RoleId = roles[1].Id },
+                new UserRole { UserId = users[0].Id, RoleId = roles[2].Id },
+            
+                // 采购主管
+                new UserRole { UserId = users[1].Id, RoleId = roles[1].Id },
+            
+                // 库存经理
+                new UserRole { UserId = users[2].Id, RoleId = roles[2].Id },
+            
+                // 普通员工
+                new UserRole { UserId = users[3].Id, RoleId = roles[3].Id },
+            
+                // 财务专员
+                new UserRole { UserId = users[4].Id, RoleId = roles[4].Id }
+            };
+            db.Insertable(userRoles).ExecuteCommand();
+        }
+    }
+
+    // ==================== 辅助方法 ====================
+    private HashSet<string> GetUserPermissions(User user)
+    {
+        // 实际实现：从角色-权限映射获取权限集合
+        return new HashSet<string> {
+        "menu:view:home",
+        "menu:view:purchase",
+        "purchase:create",
+        // ...其他权限
+        };
+    }
+
+
+    //初始化数据示例(C#) - 采购单查看页面按钮权限设置
+    public class ButtonPermissionInitializer
+    {
+        public static void Initialize(SqlSugarClient db)
+        {
+            // 0. 确保表存在
+            db.CodeFirst.InitTables<Permission, RolePermission, SysPage, SysButton>();
+            
+            // 1. 创建采购单查看页面
+            var prViewPage = new SysPage
+            {
+                RouteName = "PrView",
+                DisplayName = "采购单查看页面",
+                Description = "采购申请单详情查看页面"
+            };
+            prViewPage.Id = db.Insertable(prViewPage).ExecuteReturnIdentity();
+            
+            // 2. 创建按钮（对应采购单页面的操作）
+            var buttons = new List<SysButton>
+            {
+                new SysButton {
+                    PageId = prViewPage.Id,
+                    ButtonCode = "PrView_Refresh",
+                    DisplayText = "刷新",
+                    ButtonType = "Default",
+                    IconType = "reload",
+                    OrderIndex = 1,
+                    ActionName = "Refresh",
+                    PermissionKey = "button:prview:refresh"
+                },
+                new SysButton {
+                    PageId = prViewPage.Id,
+                    ButtonCode = "PrView_Edit",
+                    DisplayText = "编辑",
+                    ButtonType = "Primary",
+                    IconType = "edit",
+                    OrderIndex = 2,
+                    ActionName = "Edit",
+                    PermissionKey = "button:prview:edit"
+                },
+                new SysButton {
+                    PageId = prViewPage.Id,
+                    ButtonCode = "PrView_Submit",
+                    DisplayText = "提交",
+                    ButtonType = "Primary",
+                    IconType = "check-circle",
+                    OrderIndex = 3,
+                    ActionName = "Submit",
+                    PermissionKey = "button:prview:submit"
+                },
+                new SysButton {
+                    PageId = prViewPage.Id,
+                    ButtonCode = "PrView_Approve",
+                    DisplayText = "审批",
+                    ButtonType = "Success",
+                    IconType = "audit",
+                    OrderIndex = 4,
+                    ActionName = "Approve",
+                    PermissionKey = "button:prview:approve"
+                },
+                new SysButton {
+                    PageId = prViewPage.Id,
+                    ButtonCode = "PrView_Reject",
+                    DisplayText = "拒绝",
+                    ButtonType = "Danger",
+                    IconType = "close-circle",
+                    OrderIndex = 5,
+                    ActionName = "Reject",
+                    PermissionKey = "button:prview:reject"
+                },
+                new SysButton {
+                    PageId = prViewPage.Id,
+                    ButtonCode = "PrView_CreatePO",
+                    DisplayText = "生成采购订单",
+                    ButtonType = "Primary",
+                    IconType = "file-add",
+                    OrderIndex = 6,
+                    ActionName = "CreatePO",
+                    PermissionKey = "button:prview:createpo"
+                },
+                new SysButton {
+                    PageId = prViewPage.Id,
+                    ButtonCode = "PrView_Print",
+                    DisplayText = "打印",
+                    ButtonType = "Default",
+                    IconType = "printer",
+                    OrderIndex = 7,
+                    ActionName = "Print",
+                    PermissionKey = "button:prview:print"
+                }
+            };
+            db.Insertable(buttons).ExecuteReturnIdentity();
+
+            // 3. 确保权限存在（如果不存在则创建）
+            var permissionKeys = buttons.Select(b => b.PermissionKey).Distinct().ToList();
+            var existingPermissions = db.Queryable<Permission>()
+                .Where(p => permissionKeys.Contains(p.PermissionKey))
+                .ToList();
+            
+            var newPermissions = permissionKeys
+                .Where(key => !existingPermissions.Any(p => p.PermissionKey == key))
+                .Select(key => new Permission { PermissionKey = key })
+                .ToList();
+            
+            if (newPermissions.Any())
+            {
+                db.Insertable(newPermissions).ExecuteCommand();
+                existingPermissions = db.Queryable<Permission>()
+                    .Where(p => permissionKeys.Contains(p.PermissionKey))
+                    .ToList();
+            }
+            
+            // 4. 获取角色（假设这些角色已存在）
+            var roles = db.Queryable<Role>().ToList();
+            var purchaserRole = roles.First(r => r.Name == "采购主管");
+            var approverRole = roles.First(r => r.Name == "库存经理");
+            var financeRole = roles.First(r => r.Name == "财务专员");
+            var adminRole = roles.First(r => r.Name == "系统管理员");
+            
+            // 5. 创建角色-按钮权限关联
+            var rolePermissions = new List<RolePermission>();
+            
+            // 采购员权限
+            rolePermissions.AddRange(new[]
+            {
+                CreateRolePermission(purchaserRole.Id, "button:prview:refresh", buttons, existingPermissions),
+                CreateRolePermission(purchaserRole.Id, "button:prview:edit", buttons, existingPermissions),
+                CreateRolePermission(purchaserRole.Id, "button:prview:submit", buttons, existingPermissions),
+                CreateRolePermission(purchaserRole.Id, "button:prview:print", buttons, existingPermissions)
+            });
+            
+            // 审批员权限
+            rolePermissions.AddRange(new[]
+            {
+                CreateRolePermission(approverRole.Id, "button:prview:refresh", buttons, existingPermissions),
+                CreateRolePermission(approverRole.Id, "button:prview:approve", buttons, existingPermissions),
+                CreateRolePermission(approverRole.Id, "button:prview:reject", buttons, existingPermissions),
+                CreateRolePermission(approverRole.Id, "button:prview:print", buttons, existingPermissions)
+            });
+            
+            // 财务权限
+            rolePermissions.AddRange(new[]
+            {
+                CreateRolePermission(financeRole.Id, "button:prview:refresh", buttons, existingPermissions),
+                CreateRolePermission(financeRole.Id, "button:prview:print", buttons, existingPermissions),
+                CreateRolePermission(financeRole.Id, "button:prview:createpo", buttons, existingPermissions)
+            });
+            
+            // 管理员拥有所有权限
+            foreach (var button in buttons)
+            {
+                rolePermissions.Add(CreateRolePermission(
+                    adminRole.Id,
+                    button.PermissionKey,
+                    buttons,
+                    existingPermissions));
+            }
+            
+            // 插入角色权限
+            db.Insertable(rolePermissions).ExecuteCommand();
+        }
+        
+        private static RolePermission CreateRolePermission(
+            int roleId,
+            string permissionKey,
+            List<SysButton> buttons,
+            List<Permission> permissions)
+        {
+            var permission = permissions.First(p => p.PermissionKey == permissionKey);
+            var button = buttons.First(b => b.PermissionKey == permissionKey);
+            
+            return new RolePermission
+            {
+                RoleId = roleId,
+                PermissionId = permission.Id,
+                ButtonId = button.Id
+            };
+        }
+    }
+    // ==================== 性能优化建议 ====================
+    /*
+    1. 数据库层优化：
+       - 添加索引：ParentId, Active, Sequence
+       - 使用缓存：菜单数据变动频率低，适合缓存
+
+    2. 前端优化：
+       - 实现按需加载：只加载当前可见菜单
+       - 本地存储权限信息，避免重复请求
+
+    3. 权限检查优化：
+       - 预生成权限树，减少实时计算
+       - 使用位运算加速权限检查
+    */
+}
+
+
+    

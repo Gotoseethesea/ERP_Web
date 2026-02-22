@@ -1,0 +1,214 @@
+﻿@using AntDesign
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@inject MessageService MessageService
+
+<Card Title="属性选择器" Style="margin-bottom:16px">
+    <Alert Message="为每个属性选择对应的选项，系统将自动生成规格描述" Type="AlertType.Info" ShowIcon = "true" />
+    
+    <Table TItem="AttributeRow" DataSource="@attributeRows" Loading="@loading">
+        <PropertyColumn Property="c => c.AttributeName" Title="属性名称" Width="20%"/>
+        <PropertyColumn Property="c => c.Options" Title="选项选择" Width="50%" Context="selectRow">
+            @if (context.Options?.Any() == true)
+                {
+                    <Select TItem="InvAttributeOption"
+                        TItemValue="int"
+                        Style="width: 100%"
+                        @bind-Value="@context.SelectedOptionId"
+                        Placeholder="请选择">
+                        @foreach (var option in context.Options)
+                            {
+                            <SelectOption Context="selectRowed" Value="@option.Id">@option.Value</SelectOption>
+                            }
+                    </Select>
+                }
+@*                 else
+                {
+                <Input @bind-Value="@selectRow.CustomValue"
+                           Placeholder="输入自定义值" 
+                           Style="width: 100%" />
+                } *@
+        </PropertyColumn>
+        
+        <ActionColumn Title="操作" Width="10%">
+                <Button Type="ButtonType.Link" 
+                    Icon="delete" 
+                    Size="ButtonSize.Small"
+                    OnClick="@(() => RemoveAttributeRow(context))" />
+        </ActionColumn>
+    </Table>
+    
+    <Divider Style="margin: 12px 0" />
+    
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <Button Type="ButtonType.Dashed" Icon="plus" OnClick="AddNewAttributeRow">
+            添加新属性
+        </Button>
+        
+        <Space>
+            <Button Type="ButtonType.Primary" Icon="build" OnClick="GenerateSpecification">
+                生成规格描述
+            </Button>
+        </Space>
+    </div>
+</Card>
+
+@if (!string.IsNullOrEmpty(generatedDescription))
+{
+    <Card Title="生成的规格描述">
+        <Paragraph>@generatedDescription</Paragraph>
+        <Button Type="ButtonType.Link" Icon="copy" OnClick="CopyDescription">
+            复制描述
+        </Button>
+    </Card>
+}
+
+@code {
+    // ==================== 参数和属性 ====================
+    [Parameter]
+    public string InvCode { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<string> OnDescriptionGenerated { get; set; }
+
+    // ==================== 数据结构 ====================
+    public class AttributeRow
+    {
+        public int AttributeId { get; set; }
+        public string AttributeName { get; set; } = "";
+        public List<InvAttributeOption>? Options { get; set; }
+        public int SelectedOptionId { get; set; }
+        public string? CustomValue { get; set; }
+    }
+
+    // ==================== 组件状态 ====================
+    private List<AttributeRow> attributeRows = new();
+    private List<InvAttribute> availableAttributes = new();
+    private List<InvAttributeOption> allOptions = new();
+    private string generatedDescription = "";
+    private bool loading = false;
+
+    // ==================== 生命周期 ====================
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(InvCode))
+        {
+            await LoadAttributeData();
+        }
+        else
+        {
+            availableAttributes.Clear();
+            allOptions.Clear();
+            attributeRows.Clear();
+        }
+    }
+
+    // ==================== 数据加载 ====================
+    private async Task LoadAttributeData()
+    {
+        loading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var db = new SqlClient().Db;
+            
+            // 加载存货属性
+            availableAttributes = await db.Queryable<InvAttribute>()
+                .Where(a => a.InvCode == InvCode && a.Active == true)
+                .ToListAsync();
+            
+            // 加载属性选项
+            var attributeIds = availableAttributes.Select(a => a.Id).ToList();
+            if (attributeIds.Any())
+            {
+                allOptions = await db.Queryable<InvAttributeOption>()
+                    .Where(o => attributeIds.Contains(o.AttributeId) && o.Active == true)
+                    .ToListAsync();
+            }
+            // 初始化属性行
+            attributeRows = availableAttributes.Select(a => new AttributeRow
+            {
+                AttributeId = a.Id,
+                AttributeName = a.Attribute,
+                Options = allOptions.Where(o => o.AttributeId == a.Id).ToList()
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"加载属性失败: {ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    // ==================== 操作方法 ====================
+    private void AddNewAttributeRow()
+    {
+        attributeRows.Add(new AttributeRow
+        {
+            AttributeId = -1,
+            AttributeName = "新属性",
+            Options = null
+        });
+    }
+
+    private void RemoveAttributeRow(AttributeRow row)
+    {
+        attributeRows.Remove(row);
+    }
+
+    private async Task GenerateSpecification()
+    {
+        // 验证选择
+        var invalidRows = attributeRows.Where(r => 
+            r.Options?.Any() == true && r.SelectedOptionId == null ||
+            r.Options == null && string.IsNullOrWhiteSpace(r.CustomValue));
+        
+        if (invalidRows.Any())
+        {
+            MessageService.Warning("请为所有属性选择选项或输入自定义值");
+            return;
+        }
+        
+        // 生成规格描述
+        var descriptionParts = new List<string>();
+        
+        foreach (var row in attributeRows)
+        {
+            if (row.Options?.Any() == true)
+            {
+                var option = allOptions.FirstOrDefault(o => o.Id == row.SelectedOptionId);
+                if (option != null)
+                {
+                    descriptionParts.Add($"{row.AttributeName}:{option.Value}");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(row.CustomValue))
+            {
+                descriptionParts.Add($"{row.AttributeName}:{row.CustomValue}");
+            }
+        }
+        
+        generatedDescription = string.Join(", ", descriptionParts);
+        
+        // 触发回调
+        await OnDescriptionGenerated.InvokeAsync(generatedDescription);
+    }
+
+    private async Task CopyDescription()
+    {
+        try
+        {
+            //JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", generatedDescription);
+            MessageService.Success("描述已复制到剪贴板");
+        }
+        catch
+        {
+            MessageService.Error("复制失败，请手动复制");
+        }
+    }
+}

@@ -1,0 +1,139 @@
+﻿@using ERP_Web.Core.Utilities
+@* Components/Shared/FilterPanel.razor *@
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        @foreach (var filter in Filters)
+        {
+            <GridCol Span="@filter.Span">
+                <FormItem Label="@filter.Label"> 
+                    @if (filter.Type == FilterType.Select)
+                    {
+                        <Select Mode="SelectMode.Multiple"
+                                Placeholder="@filter.Placeholder"
+                                @bind-Values="@filter.SelectedValues"
+                                TItemValue="string"
+                                TItem="string"
+                                EnableSearch="@filter.EnableSearch"
+                                AllowClear="@filter.AllowClear">
+                            <SelectOptions>
+                                @foreach (var option in filter.Options)
+                                {
+                                    <SelectOption Value="@option.Value" Label="@option.Label" />
+                                }
+                            </SelectOptions>
+                        </Select>
+                    }
+                    @if (filter.Type == FilterType.DateRange)
+                    {
+                        <RangePicker TValue="DateOnly?[]"
+                                     Format="yyyy-MM-dd"
+                                     Mask="yyyy-MM-dd"
+                                     @bind-Value="filter.DateRange" />
+                    }
+                    @if (filter.Type == FilterType.Like)
+                    {
+                        <Input TValue="string" @bind-Value="filter.Placeholder" />
+                    }
+                </FormItem>
+            </GridCol>
+        }
+        <GridCol Span="2">
+            <div style="text-align: right; margin-right: 16px">
+                <Button OnClick="OnSearch"
+                        Icon="@IconType.Outline.Search"
+                        Type="@ButtonType.Primary"
+                        Size="ButtonSize.Default">
+                    搜索
+                </Button>
+            </div>
+        </GridCol>
+    </GridRow>
+</Form>
+
+@code {
+    [Parameter]
+    public List<FilterItem> Filters { get; set; } = new();
+
+    [Parameter]
+    public Dictionary<string, int> gutter { get; set; } = new();
+
+    [Parameter]
+    public object FilterModel { get; set; }
+
+    [Parameter]
+    public EventCallback OnSearch { get; set; }
+
+    public enum FilterType { Select, DateRange,Like}
+
+    public class FilterItem
+    {
+        public string Label { get; set; }
+        public FilterType Type { get; set; }
+        public int Span { get; set; } = 6;
+        public string Placeholder { get; set; } = "请选择";
+        public bool EnableSearch { get; set; } = true;
+        public bool AllowClear { get; set; } = true;
+        public List<OptionItem> Options { get; set; } = new();
+        public IEnumerable<string>? SelectedValues { get; set; }    // 选择的内容
+        public DateOnly?[] DateRange { get; set; } = new DateOnly?[2];
+    }
+
+    public class OptionItem
+    {
+        public string Value { get; set; }
+        public string Label { get; set; }
+    }
+
+
+    public List<IConditionalModel> GenerateConditionalModels()
+    {
+        var conditions = new List<IConditionalModel>();
+        foreach (var filter in Filters)
+        {
+            switch (filter.Type)
+            {
+                case FilterType.Select when filter.SelectedValues?.Any() == true:
+                    conditions.Add(FilterUtils.CreateConditionalCollectionForColumn(
+                        values: filter.SelectedValues,
+                        columnName: GetColumnName(filter),
+                        columnType: "string"
+                    ));
+                    break;
+                case FilterType.DateRange when filter.DateRange?.Any() == true && filter.DateRange[0] != null && filter.DateRange[1] != null:
+                    conditions.Add(FilterUtils.CreateConditionalCollectionForColumn(
+                        values: filter.DateRange,
+                        columnName: "Date"  // 实际使用时可能需要根据filter配置列名
+                    ));
+                    break;
+                case FilterType.Like when !string.IsNullOrEmpty(filter.Placeholder):
+                    conditions.Add(FilterUtils.CreateConditionalCollectionForColumn(
+                        values: new[] { filter.Placeholder },
+                        columnName: GetColumnName(filter),
+                        columnType: "string",
+                        conditionType: ConditionalType.Like
+                    ));
+                    break;
+            }
+        }
+        return conditions;
+    }
+
+    // 辅助方法：根据筛选项获取对应的数据库列名
+    private string GetColumnName(FilterItem filter)
+    {
+        // 这里可以配置映射关系，例如：
+        return filter.Label switch
+        {
+            "年份" => "FiscalYear",
+            "月份" => "Period",
+            "代码" => "Code",
+            "单号" => "TrxNo",
+            "摘要" => "Explanation",
+            "部门" => "DepartmentCode",
+            "仓库" => "WarehouseCode",
+            "存货编码" => "InvCode",
+            "商品编码" => "InvCode",
+            _ => filter.Label
+        };
+    }
+}

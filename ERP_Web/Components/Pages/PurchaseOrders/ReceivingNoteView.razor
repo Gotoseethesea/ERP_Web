@@ -1,0 +1,677 @@
+﻿@page "/RNView/{Text?}"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using ERP_Web.Components.Custom
+@using ERP_Web.Core.Utilities
+@using ERP_Web.Models
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@using SqlSugar
+@using System.Text.Json
+@inject HttpClient Http
+@inject MessageService Message
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>收货单</PageTitle>
+<h3>收货单</h3>
+
+<!-- 动态权限按钮组，和采购单完全一致 -->
+<DynamicButtonGroup PageRoute="RNView" OnButtonClick="HandleButtonClick" />
+
+@code {
+    private SqlClient _sqlClient = new();
+    private bool _isProcessing = false;
+    private User _currentUser = new();
+
+    private async Task HandleButtonClick(string actionName)
+    {
+        try
+        {
+            _isProcessing = true;
+            StateHasChanged();
+
+            switch (actionName)
+            {
+                case "Refresh":
+                    await RefreshAction();
+                    break;
+                case "Edit":
+                    await EditAction();
+                    break;
+                case "Submit":
+                    await SubmitAction();
+                    break;
+                case "Approve":
+                    await ApproveAction();
+                    break;
+                case "Reject":
+                    await RejectAction();
+                    break;
+                case "CompleteInbound":
+                    await CompleteInboundAction();
+                    break;
+                case "Print":
+                    await PrintAction();
+                    break;
+                default:
+                    await HandleCustomAction(actionName);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowErrorModal($"操作失败: {ex.Message}");
+            Console.WriteLine($"{actionName}操作错误: {ex.Message}\n{ex.StackTrace}");
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    // 刷新操作：重新加载数据
+    private async Task RefreshAction()
+    {
+        // 重新加载收货单数据，和采购单查询逻辑完全一致
+        RN = _sqlClient.Db.Queryable<ReceivingNote>()
+            .IncludesAllFirstLayer()
+            .IncludesAllSecondLayer(xc => xc.RNInvInOuts)
+            .Where(it => it.Id == long.Parse(Text))
+            .First();
+        
+        // 重置编辑状态
+        Enable = true;
+        IsVisible = false;
+        
+        // 加载历史附件
+        await LoadAttachments();
+        
+        ShowSuccessModal("数据刷新成功");
+    }
+
+    // 编辑操作：进入编辑模式
+    private async Task EditAction()
+    {
+        // 初始化关联数据，避免空引用
+        foreach (var row in RN.RNInvInOuts)
+        {
+            //row.Company ??= new Company();
+            row.Warehouse ??= new Warehouse();
+        }
+        
+        // 设置编辑状态
+        Enable = false;
+        IsVisible = true;
+        
+        // 预加载基础数据
+        _loading = true;
+        Invs = await Task.Run(() => 
+            _sqlClient.Db.Queryable<InventoryItem>().ToList());
+        Warehouses = await Task.Run(() => 
+            _sqlClient.Db.Queryable<Warehouse>().ToList());
+        _loading = false;
+        
+        ShowInfoModal("进入编辑模式", "您现在可以修改收货单内容");
+    }
+
+    // 提交操作：提交审批
+    private async Task SubmitAction()
+    {
+        // 校验必填项
+        if (RN.RNInvInOuts.Any(r => 
+            r.InventoryItem == null || 
+            string.IsNullOrEmpty(r.InventoryItem.Code) ||
+            r.ReceivedQuantity <= 0))
+        {
+            throw new Exception("存在未选择存货或实收数量为0的行项");
+        }
+        
+        // 保存数据
+        RN.Status = DocumentStatus.Submitted;
+        RN.LastUpdateTime = DateTime.Now;
+        // 后续可扩展审批流程，和采购单Sumit方法逻辑一致
+        RN.Update();
+        
+        ShowSuccessModal("提交成功", "收货单已成功提交审批");
+    }
+
+    // 审批通过（后续扩展审批流程后完善）
+    private async Task ApproveAction()
+    {
+        if (RN.Status != DocumentStatus.Submitted)
+        {
+            ShowWarningModal("操作失败", "只能审批已提交的收货单");
+            return;
+        }
+        RN.Status = DocumentStatus.Approved;
+        RN.Checker = _currentUser?.Name;
+        RN.LastUpdateTime = DateTime.Now;
+        RN.Update();
+        ShowSuccessModal("审批通过", "收货单已审批通过，可执行入库操作");
+        await RefreshAction();
+    }
+
+    // 审批拒绝（后续扩展审批流程后完善）
+    private async Task RejectAction()
+    {
+        try
+        {
+
+        }
+        catch (Exception ex)
+        {
+            ShowErrorModal($"拒绝失败: {ex.Message}");
+        }
+    }
+
+    // 完成入库：调用你实体自带的CompleteReceiving方法
+    private async Task CompleteInboundAction()
+    {
+        if (RN.Status != DocumentStatus.Approved)
+        {
+            ShowWarningModal("操作失败", "只有已审批的收货单才能执行入库");
+            return;
+        }
+
+        var confirm = await ComfirmService.Show("确认执行入库？", "入库后库存会自动更新，操作不可逆", ConfirmButtons.YesNo, ConfirmIcon.Question);
+        if (confirm != ConfirmResult.Yes) return;
+
+        try
+        {
+            RN.CompleteReceiving();
+            ShowSuccessModal("入库完成", "已自动生成入库单，库存已更新");
+            await RefreshAction();
+        }
+        catch (Exception ex)
+        {
+            ShowErrorModal($"入库失败: {ex.Message}");
+        }
+    }
+
+    // 打印操作
+    private async Task PrintAction()
+    {
+        Message.Info("打印功能开发中");
+    }
+
+    // 处理自定义操作
+    private async Task HandleCustomAction(string actionName)
+    {
+        var method = GetType().GetMethod($"{actionName}Action");
+        if (method != null)
+        {
+            await (Task)method.Invoke(this, null);
+            return;
+        }
+        ShowInfoModal("未实现操作", $"'{actionName}'功能尚未实现");
+    }
+
+    // 模态框辅助方法，和采购单完全一致
+    private void ShowSuccessModal(string title = "操作成功", string message = "")
+    {
+        Modal_Title = title;
+        Mes = string.IsNullOrEmpty(message) ? "操作已成功完成" : message;
+        Modal_visible = true;
+    }
+    private void ShowErrorModal(string message)
+    {
+        Modal_Title = "操作失败";
+        Mes = message;
+        Modal_visible = true;
+    }
+    private void ShowWarningModal(string title, string message)
+    {
+        Modal_Title = title;
+        Mes = message;
+        Modal_visible = true;
+    }
+    private void ShowInfoModal(string title, string message)
+    {
+        Modal_Title = title;
+        Mes = message;
+        Modal_visible = true;
+    }
+
+    // 加载附件，和采购单逻辑完全一致
+    private async Task LoadAttachments()
+    {
+        try
+        {
+            var attachments = await Http.GetFromJsonAsync<List<SysAttachment>>(
+                $"/api/Upload/GetAttachments?refCode={RN.Code}&refType=ReceivingNote");
+                
+            _defaultFileList = attachments?.Select(a => new UploadFileItem
+            {
+                Id = a.Id.ToString(),
+                FileName = a.Name,
+                State = UploadState.Success,
+                Url = a.Path
+            }).ToList() ?? new List<UploadFileItem>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"加载附件失败: {ex.Message}");
+        }
+    }
+}
+
+<!-- 通用操作提示模态框，和采购单完全一致 -->
+<Modal Title="@Modal_Title"
+       OnOk="@HandleOk"
+       OnCancel="@HandleCancel"
+       @bind-Visible="@Modal_visible">
+    <p>@Mes</p>
+</Modal>
+
+@code {
+    private bool Modal_visible = false;
+    private string Modal_Title = "操作";
+    private string Mes = "操作成功";
+    private void HandleOk() => Modal_visible = false;
+    private void HandleCancel() => Modal_visible = false;
+}
+
+<!-- 收货单主信息区域，和采购单布局风格完全一致 -->
+<Form Model="@RN" LabelColSpan="0" WrapperColSpan="0">
+    <GridRow gutter="@gutter">
+        <GridCol Class="gutter-row" Span="6" style="width: 180px">
+            <FormItem Label="收货单号">
+                <a>@RN.Code</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="单据类型">
+                <a>@RN.PoTrxGroup?.Name</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6" style="width: 180px">
+            <FormItem Label="收货日期">
+                <a>@RN.Date.ToString("yyyy-MM-dd")</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6" style="width: 180px">
+            <FormItem Label="供应商">
+                <a>@RN.Company?.Name</a>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+    <GridRow gutter="@gutter">
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="收货总数量">
+                <a style="color:#1890ff; font-weight:500">@Math.Round(RN.Quantity, 2)</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="不含税金额">
+                <a>@Math.Round(RN.Amount, 2)</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="含税金额">
+                <a>@Math.Round(RN.AmountIncTax, 2)</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="单据状态">
+                <Tag Color="@GetStatusTagColor(RN.Status)">@RN.GetStatusDisplayName()</Tag>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+    <GridRow gutter="@gutter">
+        <GridCol Class="gutter-row" Span="12">
+            <FormItem Label="备注">
+                <a>@RN.Explanation</a>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <!-- 附件区域，和采购单样式完全一致 -->
+    <GridRow Gutter=@gutter>
+        <GridCol Class="gutter-row" Span="24">
+            <FormItem Label="附件">
+                <div class="attachments-container">
+                    <FileUpload RefCode="@RN.Code"
+                                RefType="ReceivingNote"
+                                OnUploadSuccess="HandleUploadSuccess"
+                                OnRemoveSuccess="HandleRemoveSuccess"
+                                ShowButton="false"
+                                ShowRemoveIcon="false"
+                                Disabled="true" />
+                    @if (_defaultFileList.Any())
+                    {
+                        <div class="files-grid">
+                            @foreach (var file in _defaultFileList)
+                            {
+                                <div class="file-card">
+                                    <div class="file-icon-container">
+                                        <Icon Type="file" Theme="IconThemeType.Outline" Class="file-icon" />
+                                    </div>
+                                    <div class="file-name">@file.FileName</div>
+                                    <a href="@file.Url" target="_blank" class="download-link">
+                                        <Icon Type="download" Theme="IconThemeType.Outline" />
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <!-- 审批流程时间轴，直接复用你之前开发的组件，后续扩展审批流程后直接生效 -->
+    <GridRow gutter="@gutter" style="margin-top:16px">
+        <GridCol Class="gutter-row" Span="24">
+            <!-- 后续给ReceivingNote加审批流程字段后，直接替换为<ApprovalOperationTimeline />组件 -->
+            @if (RN.Status != DocumentStatus.Draft)
+            {
+@*                 <Alert Message="@($"当前状态：{RN.GetStatusDisplayName()}，处理人：{RN.Checker ?? "待分配"}")" Type="AlertType.Info" ShowIcon />
+ *@            }
+        </GridCol>
+    </GridRow>
+
+    <!-- 收货明细表格，突出收货单核心字段：订单数量、实收数量 -->
+    <Table DataSource="@RN.RNInvInOuts" TItem="RNInvInOut" Context="row" Size="TableSize.Small" HidePagination Bordered ScrollX="1800" StickyOffsetHeader="64" Style="margin-top:16px">
+        <PropertyColumn Property="c => c.InvCode" Title="存货代码" Width="100px" />
+        <PropertyColumn Property="c => c.InventoryItem.Name" Title="存货名称" Width="250px" />
+        <PropertyColumn Property="c => c.Specification.Description" Title="规格型号" Width="200px" />
+        <PropertyColumn Property="c => c.Specification.Unit" Title="单位" Width="60px" />
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Quantity" Title="订单数量" Width="100px">
+            <a>@Math.Round(@row.Quantity, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.ReceivedQuantity" Title="实收数量" Width="100px">
+            <a style="color:#52c41a; font-weight:500">@Math.Round(@row.ReceivedQuantity, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Price" Title="不含税单价" Width="120px">
+            <a>@Math.Round(@row.Price, 4)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Amount" Title="不含税金额" Width="120px">
+            <a>@Math.Round(@row.Amount, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.TaxRate" Title="税率(%)" Width="80px">
+            <a>@Math.Round(@row.TaxRate * 100, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.PriceIncTax" Title="含税单价" Width="120px">
+            <a>@Math.Round(@row.PriceIncTax, 4)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.AmountIncTax" Title="含税金额" Width="120px">
+            <a>@Math.Round(@row.AmountIncTax, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Left" Property="c => c.Warehouse.Name" Title="收货仓库" Width="120px" />
+        <PropertyColumn Align="ColumnAlign.Left" Property="c => c.Note" Title="备注" Width="150px" />
+
+        <!-- 汇总行，和采购单风格一致 -->
+        <SummaryRow>
+            <SummaryCell ColSpan="4">合计</SummaryCell>
+            <SummaryCell Align="ColumnAlign.Right">
+                <Text Type="TextElementType.Danger">@Math.Round(RN.RNInvInOuts.Sum(r=>r.Quantity), 2)</Text>
+            </SummaryCell>
+            <SummaryCell Align="ColumnAlign.Right">
+                <Text Type="TextElementType.Danger">@Math.Round(RN.RNInvInOuts.Sum(r=>r.ReceivedQuantity), 2)</Text>
+            </SummaryCell>
+            <SummaryCell></SummaryCell>
+            <SummaryCell Align="ColumnAlign.Right">
+                <Text Type="TextElementType.Danger">@Math.Round(RN.Amount, 2)</Text>
+            </SummaryCell>
+            <SummaryCell></SummaryCell>
+            <SummaryCell></SummaryCell>
+            <SummaryCell></SummaryCell>
+            <SummaryCell Align="ColumnAlign.Right">
+                <Text Type="TextElementType.Danger">@Math.Round(RN.AmountIncTax, 2)</Text>
+            </SummaryCell>
+            <SummaryCell></SummaryCell>
+            <SummaryCell></SummaryCell>
+        </SummaryRow>
+        <SummaryRow>
+            <SummaryCell ColSpan="3">
+                <Text Type="TextElementType.Danger"> 制单人:@RN.Operator </Text>
+            </SummaryCell>
+            <SummaryCell ColSpan="4">
+                <Text Type="TextElementType.Danger"> 审核人:@RN.Checker </Text>
+            </SummaryCell>
+            <SummaryCell ColSpan="4">
+                <Text Type="TextElementType.Danger"> 过账人:@RN.Poster </Text>
+            </SummaryCell>
+        </SummaryRow>
+    </Table>
+
+    <!-- 编辑模式表格，和采购单编辑逻辑完全一致，可按需使用 -->
+    <p></p>
+    @if (@IsVisible == true)
+    {
+        <Button OnClick="addRow" Type="ButtonType.Primary" Style="margin-bottom:16px" Size="ButtonSize.Small" Disabled=@Enable>
+            插入行
+        </Button>
+        <Table DataSource="@RN.RNInvInOuts" TItem="RNInvInOut" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+               Bordered
+               Resizable
+               HidePagination
+               ScrollX="1800" StickyOffsetHeader="64">
+            <PropertyColumn Property="c => RN.RNInvInOuts.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35" />
+            <PropertyColumn Property="c => c.InvCode" Title="存货" Width="120" Fixed="ColumnFixPlacement.Left">
+                <Input @bind-Value="row.InvCode" />
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.InventoryItem.Name" Title="存货名称" Width="200" Fixed="ColumnFixPlacement.Left">
+                <Select DataSource="@Invs"
+                        @bind-SelectedItem="row.InventoryItem"
+                        EnableSearch
+                        LabelName="@nameof(InventoryItem.Name)"
+                        TItemValue="InventoryItem"
+                        TItem="InventoryItem"
+                        Placeholder="@(row.InventoryItem?.Name == null ? "选择存货" : row.InventoryItem.Name)"
+                        OnSelectedItemChanged="OnSelectedItemChangedHandler">
+                </Select>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Specification.Description" Title="规格" Width="180px">
+                <Select DataSource="row.InventoryItem.Specifications"
+                        @bind-SelectedItem="row.Specification"
+                        LabelName="@nameof(Specification.Description)"
+                        TItemValue="Specification"
+                        TItem="Specification"
+                        Placeholder="选择规格">
+                </Select>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Specification.Unit" Title="单位" Width="60px">
+                <a>@row.Specification?.Unit</a>
+            </PropertyColumn>
+            <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Quantity" Title="订单数量" Width="100px">
+                <AntDesign.InputNumber @bind-Value="row.Quantity" Precision="2" Min="0" Bordered="false" Style="text-align: right" />
+            </PropertyColumn>
+            <PropertyColumn Align="ColumnAlign.Right" Property="c => c.ReceivedQuantity" Title="实收数量" Width="100px">
+                <AntDesign.InputNumber @bind-Value="row.ReceivedQuantity" Precision="2" Min="0" Bordered="false" Style="text-align: right; color:#52c41a; font-weight:500" />
+            </PropertyColumn>
+            <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Price" Title="单价" Width="120px">
+                <AntDesign.InputNumber @bind-Value="row.Price" Precision="4" Min="0" Bordered="false" @bind-Value:after="() => row.PriceChange()" />
+            </PropertyColumn>
+            <PropertyColumn Align="ColumnAlign.Right" Property="c => c.TaxRate" Title="税率" Width="80px">
+                <AntDesign.InputNumber Step=0.01M Min="0" Max="1" @bind-Value="row.TaxRate" Bordered="false" @bind-Value:after="() => row.PriceIncTaxChange()" />
+            </PropertyColumn>
+            <PropertyColumn Align="ColumnAlign.Left" Property="c => c.Warehouse.Name" Title="收货仓库" Width="120px">
+                <Select DataSource="@Warehouses"
+                        @bind-SelectedItem="row.Warehouse"
+                        LabelName="@nameof(Warehouse.Name)"
+                        TItemValue="Warehouse"
+                        TItem="Warehouse"
+                        Placeholder="选择仓库">
+                </Select>
+            </PropertyColumn>
+            <PropertyColumn Align="ColumnAlign.Left" Property="c => c.Note" Title="备注" Width="150px">
+                <Input @bind-Value="row.Note" Bordered="false" />
+            </PropertyColumn>
+        </Table>
+        <FormItem WrapperColOffset="8" WrapperColSpan="16">
+            <Button Type="@ButtonType.Primary" HtmlType="submit" Disabled=@Enable>
+                保存修改
+            </Button>
+        </FormItem>
+    }
+</Form>
+
+<!-- 附件样式，直接复用采购单的样式，不需要修改 -->
+<style>
+    .attachments-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .files-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 8px;
+    }
+    .file-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100px;
+        padding: 8px;
+        border: 1px solid #e8e8e8;
+        border-radius: 4px;
+        background: #fafafa;
+        transition: all 0.3s;
+    }
+    .file-card:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border-color: #1890ff;
+    }
+    .file-icon-container {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+    }
+    .file-icon {
+        font-size: 28px;
+        color: #1890ff;
+    }
+    .file-name {
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+        text-align: center;
+        margin-bottom: 4px;
+    }
+    .download-link {
+        color: #666;
+        transition: color 0.3s;
+    }
+    .download-link:hover {
+        color: #1890ff;
+    }
+</style>
+
+@code {
+    // 全局配置，和采购单完全一致
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    [Parameter]
+    public string? Text { get; set; }
+    public ReceivingNote RN = new("");
+    public List<InventoryItem> Invs = new();
+    public List<Warehouse> Warehouses = Warehouse.Select();
+    private List<UploadFileItem> _defaultFileList = new();
+    public bool Enable = true;
+    public bool IsVisible = false;
+    bool _loading;
+
+    // 页面初始化，和采购单逻辑完全一致
+    protected override async Task OnInitializedAsync()
+    {
+        // 获取当前登录用户
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var account = user.FindFirst("Account")?.Value;
+        if (!string.IsNullOrEmpty(account))
+        {
+            _currentUser = await _sqlClient.Db.Queryable<User>().FirstAsync(u => u.Account == account);
+        }
+
+        // 加载收货单数据
+        long id = long.Parse(Text);
+        RN = _sqlClient.Db.Queryable<ReceivingNote>()
+            .IncludesAllFirstLayer()
+            .IncludesAllSecondLayer(xc => xc.RNInvInOuts)
+            .Includes(rn => rn.RNInvInOuts, io => io.InventoryItem, inv => inv.Specifications)
+            .Where(it => it.Id == id)
+            .First();
+
+        // 加载附件
+        await LoadAttachments();
+    }
+
+    // 编辑模式辅助方法，和采购单逻辑一致
+    void addRow()
+    {
+        RN.RNInvInOuts.Add(new RNInvInOut()
+        {
+            RNCode = RN.Code,
+            Quantity = 0,
+            ReceivedQuantity = 0,
+            Price = 0,
+            TaxRate = 0.13M // 默认税率可修改
+        });
+        RN.UpdateAmount();
+    }
+
+    private void OnSelectedItemChangedHandler(InventoryItem value)
+    {
+        // 选中存货后自动带出默认规格等逻辑，可按需扩展
+    }
+
+    private void OnFinish(EditContext editContext)
+    {
+        RN.UpdateAmount();
+        RN.LastUpdateTime = DateTime.Now;
+        RN.Update();
+        IsVisible = false;
+        ShowSuccessModal("保存成功", "收货单已更新");
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        ShowErrorModal("保存失败，请检查输入内容");
+    }
+
+    private async Task HandleUploadSuccess(UploadFileItem file)
+    {
+        Message.Success($"{file.FileName} 上传成功", 2);
+        await LoadAttachments();
+    }
+    
+    private async Task HandleRemoveSuccess(string fileId)
+    {
+        Message.Success("附件删除成功", 2);
+        await LoadAttachments();
+    }
+
+    // 获取状态标签颜色，和采购单逻辑一致
+    private string GetStatusTagColor(DocumentStatus? status)
+    {
+        return status switch
+        {
+            DocumentStatus.Draft => "gray",
+            DocumentStatus.Submitted or DocumentStatus.Auditing => "blue",
+            DocumentStatus.Approved or DocumentStatus.Completed or DocumentStatus.Posted => "green",
+            DocumentStatus.Rejected or DocumentStatus.Cancelled or DocumentStatus.Voided => "red",
+            _ => "gray"
+        };
+    }
+}

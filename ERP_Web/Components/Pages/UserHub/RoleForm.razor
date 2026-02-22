@@ -1,0 +1,35 @@
+﻿<!-- RoleForm.razor 角色表单组件 -->
+@using ERP_Web.Models.PrivilegeHub
+
+<Form Model="Role" LabelColSpan="6" WrapperColSpan="18">
+    <FormItem Label="角色名称" Required>
+        <Input @bind-Value="Role.Name" />
+    </FormItem>
+
+    <FormItem Label="角色编码">
+        <Input @bind-Value="Role.Code" />
+    </FormItem>
+
+    <FormItem Label="角色描述">
+        <TextArea @bind-Value="Role.Note" Rows="3" />
+    </FormItem>
+
+    <FormItem Label="状态">
+        <Switch @bind-Value="Role.Active"
+                CheckedChildren="启用"
+                UnCheckedChildren="禁用" />
+    </FormItem>
+
+    <FormItem WrapperColOffset="6">
+        <Space>
+            <Button Type="ButtonType.Primary" OnClick="OnSave">保存</Button>
+            <Button OnClick="OnCancel">取消</Button>
+        </Space>
+    </FormItem>
+</Form>
+
+@code {
+    [Parameter] public Role Role { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+}

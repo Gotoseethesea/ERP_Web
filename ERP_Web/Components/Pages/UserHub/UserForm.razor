@@ -1,0 +1,48 @@
+﻿<!-- 用户表单组件 -->
+@using AntDesign
+@using ERP_Web.Models
+@using ERP_Web.Models.PrivilegeHub
+
+<Form Model="@User" LabelColSpan="6" WrapperColSpan="18">
+    <FormItem Label="姓名" Required>
+        <Input @bind-Value="@User.Name" />
+    </FormItem>
+    
+    <FormItem Label="账号" Required>
+        <Input @bind-Value="@User.Account" />
+    </FormItem>
+
+    <FormItem Label="密码" Required>
+        <InputPassword @bind-Value="@User.Password" />
+    </FormItem>
+    
+    <FormItem Label="手机号">
+        <Input @bind-Value="@User.Phone" />
+    </FormItem>
+    
+    <FormItem Label="状态">
+        <Switch @bind-Value="@User.Active" 
+                CheckedChildren="启用" 
+                UnCheckedChildren="禁用" />
+    </FormItem>
+    
+    <FormItem WrapperColOffset="6">
+        <Space>
+            <Button Type="ButtonType.Primary" OnClick="OnSave">保存</Button>
+            <Button OnClick="OnCancel">取消</Button>
+        </Space>
+    </FormItem>
+</Form>
+
+@code {
+    [Parameter] public User User { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    
+    private List<Department> _departments = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        _departments = Department.Select();
+    }
+}

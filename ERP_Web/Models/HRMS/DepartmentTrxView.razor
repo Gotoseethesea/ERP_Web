@@ -1,0 +1,125 @@
+﻿@page "/hr/department"
+@* @rendermode @(new InteractiveServerRenderMode(prerender: false))
+ *@
+@using AntDesign
+@using AntDesign.TableModels
+@using AntDesign
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+
+<h3>组织架构</h3>
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="部门名称">
+                <Input @bind-Value="@Keyword" Placeholder="请输入部门名称" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="状态">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择状态"
+                        @bind-Value="@StatusFilter"
+                        TItemValue="bool?"
+                        TItem="bool?"
+                        AllowClear>
+                    <SelectOption TItemValue="bool?" TItem="bool?" Value="null" Label="全部" />
+                    <SelectOption TItemValue="bool?" TItem="bool?" Value="true" Label="启用" />
+                    <SelectOption TItemValue="bool?" TItem="bool?" Value="false" Label="禁用" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2" Offset="10">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" HtmlType="button">
+                搜索
+            </Button>
+            <Button OnClick="AddDepartment" Icon="@IconType.Outline.Plus" Type="@ButtonType.Default" Style="margin-left: 8px;">
+                新增
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<!-- 树形表格展示部门层级 -->
+<Table DataSource="@data" TItem="Department" Context="rowData" Size="TableSize.Small" RowKey="Row => Row.Id"
+       TreeChildren="c => c.Children"
+       Resizable
+       HidePagination Bordered
+       ScrollX="1500" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => c.Code" Title="部门编码" Width="120" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.Name" Title="部门名称" Width="200" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.Superior" Title="上级部门" Width="150">
+        @rowData.SuperiorDec
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.ManagerName" Title="部门负责人" Width="120" />
+    <PropertyColumn Property="c => c.Phone" Title="联系电话" Width="120" />
+    <PropertyColumn Property="c => c.Email" Title="部门邮箱" Width="180" />
+    <PropertyColumn Property="c => c.Remark" Title="备注" Width="200" />
+    <Column TData="string" Title="状态" Width="100">
+        <Tag Color="@(rowData.Active ? "green" : "red")">
+            @(rowData.Active ? "启用" : "禁用")
+        </Tag>
+    </Column>
+    <ActionColumn Title="操作" Width="180" Fixed="ColumnFixPlacement.Right">
+        <Space Size="SpaceSize.Small">
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">编辑</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">新增子部门</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small" Danger>删除</Button>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    string Keyword;
+    bool? StatusFilter;
+    Department FilterModel = new Department();
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    List<Department> data = new List<Department>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+    // 直接替换整个Refresh方法，不需要ToTree扩展
+    public async Task Refresh()
+    {
+        try
+        {
+            // 直接用你实体自带的树形构建方法，完全不需要自己写ToTree逻辑
+            data = await Department.GetTree();
+
+            // 筛选逻辑
+            if (!string.IsNullOrEmpty(Keyword))
+            {
+                data = data.Where(d => d.Name.Contains(Keyword) || d.Code.Contains(Keyword)).ToList();
+            }
+            if (StatusFilter.HasValue)
+            {
+                data = data.Where(d => d.Active == StatusFilter.Value).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询部门失败：{ex.Message}");
+            data = new List<Department>();
+        }
+    }
+
+
+    private void AddDepartment()
+    {
+        // 新增部门逻辑，和你现有新增页面逻辑保持一致即可
+    }
+}

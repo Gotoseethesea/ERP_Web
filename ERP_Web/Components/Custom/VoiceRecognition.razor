@@ -1,0 +1,693 @@
+﻿@using System.Text.Json
+@using System.Text.Json.Serialization
+@using System.Collections.Concurrent
+@using ERP_Web.Components.Custom
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<VoiceRecognition> Logger
+
+<div class="voice-recognition-container">
+    <!-- 图标填充按钮 -->
+    <button id="toggleBtn-@Id" 
+            class="voice-icon-btn @(IsRecognizing ? "recording" : "")" 
+            @onclick="ToggleVoice"
+            title="@(IsRecognizing ? "停止录音" : "开始录音")">
+        @if (IsRecognizing)
+        {
+            <Icon Type="audio-muted" Theme="IconThemeType.Outline" class="icon-fill" />
+        }
+        else
+        {
+            <Icon Type="audio" Theme="IconThemeType.Outline" class="icon-fill" />
+        }
+    </button>
+</div>
+
+<style>
+    /* 图标按钮容器 */
+    .voice-icon-btn {
+        width: 35px;
+        height: 35px;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background-color: #f0f0f0;
+        border: 1px solid #d9d9d9;
+        cursor: pointer;
+        transition: all 0.3s;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    /* 图标填充整个按钮 */
+    .icon-fill {
+        width: 100%;
+        height: 100%;
+        padding: 8px; /* 控制图标大小 */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* 确保SVG图标填充容器 */
+    .icon-fill svg {
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+    
+    /* 悬停状态 */
+    .voice-icon-btn:hover {
+        background-color: #e6f7ff;
+        border-color: #1890ff;
+    }
+    
+    /* 录音状态 */
+    .voice-icon-btn.recording {
+        background-color: #fff1f0;
+        border-color: #ffa39e;
+        animation: pulse 1.5s infinite;
+    }
+    
+    .voice-icon-btn.recording .icon-fill {
+        color: #f5222d;
+    }
+    
+    .voice-icon-btn:not(.recording) .icon-fill {
+        color: #1890ff;
+    }
+    
+    /* 脉冲动画 */
+    @@keyframes pulse {
+        0% { 
+            transform: scale(0.95); 
+            box-shadow: 0 0 0 0 rgba(245, 34, 45, 0.7);
+        }
+        70% { 
+            transform: scale(1); 
+            box-shadow: 0 0 0 8px rgba(245, 34, 45, 0);
+        }
+        100% { 
+            transform: scale(0.95); 
+            box-shadow: 0 0 0 0 rgba(245, 34, 45, 0);
+        }
+    }
+    
+    /* 容器样式 */
+    .voice-recognition-container {
+        display: inline-block;
+        margin: 5px;
+    }
+</style>
+
+
+@* <div class="voice-recognition">    
+    <div class="mt-2">
+        <Tag Color="TagColor.Magenta">@FinalResult</Tag>
+    </div>
+    
+    <!-- 添加状态和错误信息显示 -->
+    <div class="mt-2">
+        @if (IsRecognizing)
+        {
+            <div class="recording-indicator">
+                <div class="pulse"></div>
+                <span>正在录音中... 请说话</span>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(Error))
+        {
+            <Alert Type="AlertType.Error" Message="@Error" />
+        }
+        @if (DebugLogs.Any())
+        {
+            <div class="debug-log">
+                <h5>调试日志:</h5>
+                @foreach (var log in DebugLogs)
+                {
+                    <p>@log</p>
+                }
+            </div>
+        }
+    </div>
+</div>
+ *@
+@if (ShowDebugInfo)
+{
+    <div class="debug-info mt-3">
+        <TextArea Rows="3" ReadOnly Value="@DebugInfo" Style="width: 100%" />
+    </div>
+}
+
+<script suppress-error="BL9992">
+    // 语音识别管理器
+    window.voiceRecognitionManager = (function() {
+        const instances = {};
+        
+        // 创建语音识别实例
+        function createInstance(id, lang) {
+            console.log(`[语音识别] 创建实例: ${id}, 语言: ${lang}`);
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                console.error("您的浏览器不支持语音识别。请使用最新版本的 Chrome 或 Edge。");
+                return null;
+            }
+            
+            const recognition = new SpeechRecognition();
+            recognition.lang = lang;
+            recognition.interimResults = true;  // 获取临时结果
+            recognition.continuous = true;      // 连续识别模式
+            
+            console.log(`[语音识别] 实例创建成功: ${id}`);
+            return {
+                recognition: recognition,
+                isRecognizing: false,
+                finalResult: '',
+                fullResult: { paragraphs: [] },
+                currentParagraph: { sentences: [] }
+            };
+        }
+        
+        // 启动语音识别
+        function startRecognition(id) {
+            console.log(`[语音识别] 启动请求: ${id}`);
+            let instance = instances[id];
+            if (!instance) {
+                console.log(`[语音识别] 实例 ${id} 不存在，将创建新实例`);
+                instance = createInstance(id, 'zh-CN');
+                if (!instance) return false;
+                instances[id] = instance;
+            }
+            
+            if (instance.isRecognizing) {
+                console.log(`[语音识别] ${id} 已经在识别中`);
+                return true;
+            }
+            
+            try {
+                instance.recognition.start();
+                instance.isRecognizing = true;
+                instance.finalResult = '';
+                instance.fullResult = { paragraphs: [] };
+                instance.currentParagraph = { sentences: [] };
+                console.log(`[语音识别] ${id} 启动成功`);
+                return true;
+            } catch (error) {
+                console.error(`语音识别启动失败 (${id}):`, error);
+                return false;
+            }
+        }
+        
+        // 停止语音识别
+        function stopRecognition(id) {
+            console.log(`[语音识别] 停止请求: ${id}`);
+            const instance = instances[id];
+            if (!instance || !instance.isRecognizing) return;
+            
+            try {
+                instance.recognition.stop();
+                instance.isRecognizing = false;
+                console.log(`[语音识别] ${id} 已停止`);
+            } catch (error) {
+                console.error(`停止识别失败 (${id}):`, error);
+            }
+        }
+        
+        // 清理实例
+        function cleanupInstance(id) {
+            console.log(`[语音识别] 清理实例: ${id}`);
+            const instance = instances[id];
+            if (!instance) return;
+            
+            if (instance.recognition) {
+                try {
+                    instance.recognition.stop();
+                } catch {}
+                
+                // 移除事件监听器
+                instance.recognition.onresult = null;
+                instance.recognition.onerror = null;
+                instance.recognition.onend = null;
+            }
+            
+            delete instances[id];
+        }
+        
+        // 设置事件处理
+        function setupRecognitionEvents(id, dotNetRef) {
+            console.log(`[语音识别] 设置事件监听: ${id}`);
+            let instance = instances[id];
+            
+            // 确保实例存在
+            if (!instance) {
+                console.log(`[语音识别] 实例 ${id} 不存在，将创建新实例`);
+                instance = createInstance(id, 'zh-CN');
+                if (!instance) {
+                    console.error(`[语音识别] 创建实例 ${id} 失败`);
+                    return;
+                }
+                instances[id] = instance;
+            }
+            
+            // 移除现有事件监听器（避免重复绑定）
+            instance.recognition.onresult = null;
+            instance.recognition.onerror = null;
+            instance.recognition.onend = null;
+            
+            // 设置新的事件监听器
+            instance.recognition.onresult = (event) => {
+                console.log(`[语音识别] ${id} 收到结果事件`, event);
+                const result = processRecognitionResults(event, instance);
+                dotNetRef.invokeMethodAsync('HandleRecognitionResult',
+                    JSON.stringify(result)
+                ).catch(err => console.error('JS调用.NET失败:', err));
+            };
+            
+            instance.recognition.onerror = (event) => {
+                console.error(`[语音识别] ${id} 错误:`, event.error);
+                dotNetRef.invokeMethodAsync('HandleRecognitionError',
+                    JSON.stringify({ error: event.error })
+                ).catch(err => console.error('JS调用.NET失败:', err));
+            };
+            
+            instance.recognition.onend = () => {
+                console.log(`[语音识别] ${id} 结束`);
+                dotNetRef.invokeMethodAsync('HandleRecognitionEnd').catch(
+                    err => console.error('JS调用.NET失败:', err)
+                );
+            };
+            
+            console.log(`[语音识别] ${id} 事件监听器已设置`);
+        }
+        
+        // 处理结果
+        function processRecognitionResults(event, instance) {
+            console.log(`语音识别处理结果`);
+            const result = {
+                finalTranscript: '',
+                fullResult: instance.fullResult
+            };
+            
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const res = event.results[i];
+                const transcript = res[0].transcript.trim();
+                
+                // 移除特殊字符
+                const cleanedTranscript = transcript.replace(
+                    /[`:_.~!#$%^&*() \+ =<>?"{}|, \/ ;' \\ [ \] ·~！#￥%……&*（）—— \+ ={}|《》？：“”【】、；‘’，。、]/g,
+                    ''
+                );
+                
+                if (res.isFinal) {
+                    console.log(`[语音识别] 最终结果: ${cleanedTranscript}`);
+                    instance.currentParagraph.sentences.push({
+                        finalTranscript: cleanedTranscript
+                    });
+                    instance.fullResult.paragraphs.push(instance.currentParagraph);
+                    instance.currentParagraph = { sentences: [] };
+                    
+                    instance.finalResult = cleanedTranscript;
+                    result.finalTranscript = cleanedTranscript;
+                } else {
+                    console.log(`[语音识别] 临时结果: ${cleanedTranscript}`);
+                    if (instance.currentParagraph.sentences.length === 0) {
+                        instance.currentParagraph.sentences.push({
+                            interimTranscript: cleanedTranscript
+                        });
+                    } else {
+                        instance.currentParagraph.sentences[
+                            instance.currentParagraph.sentences.length - 1
+                        ].interimTranscript = cleanedTranscript;
+                    }
+                }
+            }
+            
+            return result;
+        }
+        
+        return {
+            createInstance,
+            startRecognition,
+            stopRecognition,
+            cleanupInstance,
+            setupRecognitionEvents
+        };
+    })();
+</script>
+
+@code {
+    // 组件参数
+    [Parameter] public string Id { get; set; } = "pr";
+    [Parameter] public string Language { get; set; } = "zh-CN";
+    [Parameter] public bool ShowDebugInfo { get; set; } = false;
+    [Parameter] public string StartButtonText { get; set; } = "开始录音";
+    [Parameter] public string StopButtonText { get; set; } = "停止录音";
+
+    // 识别结果
+    public string FinalResult { get; private set; } = string.Empty;
+    public string DebugInfo { get; private set; } = string.Empty;
+    public bool IsRecognizing { get; private set; } = false;
+    public string Error { get; private set; } = string.Empty;
+    public List<string> DebugLogs { get; private set; } = new List<string>();
+    bool IsAsyncDisposable = false;
+
+    // 事件回调
+    [Parameter] public EventCallback<RecognitionResult> OnResultReceived { get; set; }
+    [Parameter] public EventCallback<string> OnError { get; set; }
+    [Parameter] public EventCallback OnEnd { get; set; }
+
+    // DotNet引用
+    private DotNetObjectReference<VoiceRecognition> dotNetRef;
+    private bool isInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                AddDebugLog("组件首次渲染 - 开始初始化");
+                dotNetRef = DotNetObjectReference.Create(this);
+                
+                // 检查浏览器支持
+                var isSupported = await CheckBrowserSupport();
+                if (!isSupported)
+                {
+                    Error = "您的浏览器不支持语音识别功能，请使用最新版Chrome或Edge";
+                    AddDebugLog(Error);
+                    StateHasChanged();
+                    return;
+                }
+
+                // 初始化语音识别实例
+                await JS.InvokeVoidAsync("voiceRecognitionManager.createInstance", Id, Language);
+                AddDebugLog($"语音实例创建成功: {Id}");
+
+                // 设置事件处理
+                await JS.InvokeVoidAsync(
+                    "voiceRecognitionManager.setupRecognitionEvents",
+                    Id,
+                    dotNetRef
+                );
+                AddDebugLog("事件监听器已设置");
+                
+                isInitialized = true;
+                AddDebugLog("初始化完成");
+            }
+            catch (Exception ex)
+            {
+                Error = $"初始化失败: {ex.Message}";
+                AddDebugLog(Error);
+                AddDebugLog($"完整错误: {ex.ToString()}");
+                StateHasChanged();
+            }
+        }
+    }
+
+    // 添加调试日志
+    private void AddDebugLog(string message)
+    {
+        DebugLogs.Add($"{DateTime.Now:HH:mm:ss.fff} - {message}");
+        if (DebugLogs.Count > 20) DebugLogs.RemoveAt(0);
+        StateHasChanged();
+    }
+
+    // 检查浏览器支持
+    private async Task<bool> CheckBrowserSupport()
+    {
+        try
+        {
+            var isSupported = await JS.InvokeAsync<bool>("eval", 
+                "!!(window.SpeechRecognition || window.webkitSpeechRecognition)");
+                
+            AddDebugLog($"浏览器支持检测: {isSupported}");
+            return isSupported;
+        }
+        catch (Exception ex)
+        {
+            AddDebugLog($"浏览器支持检测失败: {ex.Message}");
+            return false;
+        }
+    }
+
+    public async Task ToggleVoice()
+    {
+        if (IsRecognizing)
+        {
+            await StopAsync();
+        }
+        else
+        {
+            await StartAsync();
+        }
+    }
+
+
+    // 启动识别
+    public async Task StartAsync()
+    {
+        if (IsRecognizing) 
+        {
+            AddDebugLog("已在识别中，跳过启动");
+            return;
+        }
+        
+        if (!isInitialized)
+        {
+            Error = "语音识别未初始化，请刷新页面重试";
+            AddDebugLog(Error);
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            // 重置状态
+            FinalResult = "";
+            Error = "";
+            AddDebugLog("开始语音识别");
+            StateHasChanged();
+            
+            // 启动语音识别
+            var started = await JS.InvokeAsync<bool>(
+                "voiceRecognitionManager.startRecognition",
+                Id
+            );
+
+            if (started)
+            {
+                IsRecognizing = true;
+                AddDebugLog("语音识别已启动");
+                StateHasChanged();
+            }
+            else
+            {
+                Error = "无法启动语音识别";
+                AddDebugLog(Error);
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Error = $"启动失败: {ex.Message}";
+            AddDebugLog(Error);
+            AddDebugLog($"完整错误: {ex.ToString()}");
+            StateHasChanged();
+        }
+    }
+
+    // 停止识别
+    public async Task StopAsync()
+    {
+        if (!IsRecognizing) 
+        {
+            AddDebugLog("未在识别中，跳过停止");
+            return;
+        }
+
+        try
+        {
+            AddDebugLog("停止语音识别");
+            await JS.InvokeVoidAsync(
+                "voiceRecognitionManager.stopRecognition",
+                Id
+            );
+
+            IsRecognizing = false;
+            AddDebugLog("语音识别已停止");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Error = $"停止失败: {ex.Message}";
+            AddDebugLog(Error);
+            AddDebugLog($"完整错误: {ex.ToString()}");
+            StateHasChanged();
+        }
+    }
+
+    // 处理识别结果
+    [JSInvokable]
+    public async Task HandleRecognitionResult(string resultJson)
+    {
+        try
+        {
+            AddDebugLog($"收到识别结果: {resultJson}");
+            var result = JsonSerializer.Deserialize<RecognitionResult>(resultJson);
+            if (result == null) return;
+
+            // 更新UI状态
+            FinalResult = result.FinalTranscript;
+            DebugInfo = JsonSerializer.Serialize(
+                result.FullResult,
+                new JsonSerializerOptions { WriteIndented = true }
+            );
+
+            AddDebugLog($"最终结果: {FinalResult}");
+
+            // 触发事件
+            if (OnResultReceived.HasDelegate)
+            {
+                await OnResultReceived.InvokeAsync(result);
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Error = $"处理结果失败: {ex.Message}";
+            AddDebugLog(Error);
+            AddDebugLog($"完整错误: {ex.ToString()}");
+            StateHasChanged();
+        }
+    }
+
+    // 处理识别错误
+    [JSInvokable]
+    public async Task HandleRecognitionError(string errorJson)
+    {
+        try
+        {
+            var errorData = JsonSerializer.Deserialize<ErrorData>(errorJson);
+            var errorMessage = errorData?.Error ?? "未知错误";
+
+            IsRecognizing = false;
+            Error = $"识别错误: {errorMessage}";
+            AddDebugLog(Error);
+
+            // 触发事件
+            if (OnError.HasDelegate)
+            {
+                await OnError.InvokeAsync(errorMessage);
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Error = $"处理错误失败: {ex.Message}";
+            AddDebugLog(Error);
+            AddDebugLog($"完整错误: {ex.ToString()}");
+            StateHasChanged();
+        }
+    }
+
+    // 处理识别结束
+    [JSInvokable]
+    public async Task HandleRecognitionEnd()
+    {
+        IsRecognizing = false;
+        AddDebugLog("语音识别结束");
+
+        // 触发事件
+        if (OnEnd.HasDelegate)
+        {
+            await OnEnd.InvokeAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    // 清理资源
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (isInitialized)
+            {
+                await JS.InvokeVoidAsync(
+                    "voiceRecognitionManager.cleanupInstance",
+                    Id
+                );
+                AddDebugLog("资源已清理");
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // 忽略组件销毁后的JS调用
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "清理语音识别资源时出错");
+            AddDebugLog($"清理资源错误: {ex.Message}");
+        }
+
+        dotNetRef?.Dispose();
+    }
+
+    // 启动语音识别
+    private async Task StartVoice()
+    {
+        AddDebugLog("用户点击开始按钮");
+        await StartAsync();
+    }
+    
+    // 停止语音识别
+    private async Task StopVoice()
+    {
+        AddDebugLog("用户点击停止按钮");
+        await StopAsync();
+    }
+
+    // 结果数据结构
+    public class RecognitionResult
+    {
+        [JsonPropertyName("finalTranscript")]
+        public string FinalTranscript { get; set; } = string.Empty;
+        
+        [JsonPropertyName("fullResult")]
+        public RecognitionData FullResult { get; set; } = new();
+    }
+
+    public class RecognitionData
+    {
+        [JsonPropertyName("paragraphs")]
+        public List<RecognitionParagraph> Paragraphs { get; set; } = new();
+    }
+
+    public class RecognitionParagraph
+    {
+        [JsonPropertyName("sentences")]
+        public List<RecognitionSentence> Sentences { get; set; } = new();
+    }
+
+    public class RecognitionSentence
+    {
+        [JsonPropertyName("finalTranscript")]
+        public string? FinalTranscript { get; set; }
+        
+        [JsonPropertyName("interimTranscript")]
+        public string? InterimTranscript { get; set; }
+    }
+
+    private class ErrorData
+    {
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+    }
+}
+
+

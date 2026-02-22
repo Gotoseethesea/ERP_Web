@@ -1,0 +1,90 @@
+﻿@page "/sales/cart"
+@using ERP_Web.Models
+@using ERP_Web.Models.PrivilegeHub
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>我的购物车</PageTitle>
+
+@if (cart == null)
+{
+    <Skeleton Active />
+}
+else
+{
+    <Card Title="@($"购物车 ({cart.Items.Count}件商品)")">
+        <Table DataSource="@cart.Items" TItem="CartItem" Context="context"  StickyOffsetHeader="64">
+            <Selection Width="20" />
+            <PropertyColumn Property="c => c.InventoryItem.Name" Width="100"></PropertyColumn>
+            <PropertyColumn Title="规格" Property="c => c.Specification.Description" Width="100"></PropertyColumn>
+            <PropertyColumn Title="单位" Property="c => c.Specification.Unit" Width="30"></PropertyColumn>
+            <PropertyColumn Title="单价" Property="c => c.Price" Width="100"></PropertyColumn>
+            <PropertyColumn Title="数量" Property="c => c.Quantity" Width="100">
+                <AntDesign.InputNumber  @bind-Value="@context.Quantity" Width="100" />
+            </PropertyColumn>
+            <ActionColumn Title="操作" Width="100">
+                <Template>
+                    <Button Danger Size="ButtonSize.Small"
+                            OnClick="@(() => RemoveItem(context))">
+                        删除
+                    </Button>
+                </Template>
+            </ActionColumn>
+        </Table>
+
+        <div class="cart-footer">
+            <Space>
+                <Button Type="ButtonType.Primary" Size="ButtonSize.Large">去结算</Button>
+                <Button OnClick="ContinueShopping">确认下单</Button>
+                <Button OnClick="ContinueShopping">继续购物</Button>
+            </Space>
+            <div class="cart-summary">
+                合计: <Text Strong Mark>¥@cart.TotalAmount.ToString("N2")</Text>
+            </div>
+        </div>
+    </Card>
+}
+
+@code {
+    private ShoppingCart cart;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 获取当前登录用户
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userCode = authState.User.FindFirst("Account")?.Value;
+
+        User user = User.SelectByAccount(userCode);
+
+        if (user != null)
+        {
+            cart = ShoppingCart.GetUserCart(user.Code);
+
+            // 若无购物车则创建
+            if (cart == null)
+            {
+                cart = new ShoppingCart(user)
+                {
+                    UserCode = userCode,
+                    Date = DateOnly.FromDateTime(DateTime.Now)
+                };
+                cart.Insert();
+            }
+        }
+    }
+
+    private async Task RemoveItem(CartItem item)
+    {
+        cart.RemoveItem(item.Id);
+        cart.Items.Remove(item);
+        StateHasChanged();
+    }
+
+    private void ContinueShopping()
+    {
+        // 导航到商品列表页
+        //NavigationManager.NavigateTo("/sales/products");
+        NavigationManager.NavigateTo($"/sales/products");
+
+    }
+}

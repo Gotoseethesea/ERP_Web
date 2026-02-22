@@ -1,0 +1,138 @@
+﻿@using AntDesign
+@using ERP_Web.Models
+@inject HttpClient Http
+@inject MessageService Message
+
+<Upload Name="file"
+        Action="/api/Upload/FileUpload"
+        Data="@UploadData"
+        OnChange="HandleFileChange"
+        OnRemove="HandleRemoveAsync"
+        ListType="UploadListType.Text"
+        Disabled="@Disabled"
+        ShowRemoveIcon="@ShowRemoveIcon"
+        ShowButton="@ShowButton"
+        DefaultFileList="@_defaultFileList" 
+        Multiple
+        Accept=".pdf,.docx,.png,.jpg,.jpeg,.xlsx">
+    <Button Icon="upload">点击上传附件</Button>
+</Upload>
+
+@code {
+    [Parameter] public string RefCode { get; set; }
+    [Parameter] public string RefType { get; set; }
+    [Parameter] public EventCallback<UploadFileItem> OnUploadSuccess { get; set; }
+    [Parameter] public EventCallback<string> OnRemoveSuccess { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool ShowButton { get; set; } = true;
+    [Parameter] public bool ShowRemoveIcon { get; set; } = true;
+    // 历史附件列表
+    private List<UploadFileItem> _defaultFileList = new();
+
+
+    private Dictionary<string, object> UploadData { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadExistingAttachments();
+        UploadData = new Dictionary<string, object>
+        {
+            ["refCode"] = RefCode,
+            ["refType"] = RefType
+        };
+    }
+
+    // 加载历史附件
+    private async Task LoadExistingAttachments()
+    {
+        if (RefCode == null) return;
+        
+        try
+        {
+            var attachments = await Http.GetFromJsonAsync<List<SysAttachment>>(
+                $"/api/Upload/GetAttachments?refCode={RefCode}&refType={RefType}");
+            
+            _defaultFileList = attachments?.Select(a => new UploadFileItem
+            {
+                Id = a.Id.ToString(),
+                FileName = a.Name,
+                State = UploadState.Success,
+                Url = a.Path, // 下载链接
+                Response = a.Id.ToString() // 存储附件ID用于删除
+            }).ToList() ?? new List<UploadFileItem>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"加载附件失败: {ex.Message}");
+        }
+    }
+
+    // 返回类型为 Dictionary<string, object>
+    private Dictionary<string, object> GetUploadData(UploadFileItem file)
+    {
+        return new Dictionary<string, object>
+        {
+            ["refCode"] = RefCode,
+            ["refType"] = RefType
+        };
+    }
+
+    // 处理文件状态变化
+    private async Task HandleFileChange(UploadInfo args)
+    {
+        if (args.File.State == UploadState.Success)
+        {
+            UploadData = new Dictionary<string, object>
+            {
+                ["refCode"] = RefCode,
+                ["refType"] = RefType
+            };
+            await OnUploadSuccess.InvokeAsync(args.File);
+            Message.Success($"{args.File.FileName} 上传成功", 2);
+        }
+        else if (args.File.State == UploadState.Fail)
+        {
+            Message.Error($"{args.File.FileName} 上传失败: {GetErrorMessage(args.File.Response)}", 3);
+        }
+    }
+
+    // 同步方法示例
+    private bool HandleRemove(UploadFileItem file)
+    {
+        if (!string.IsNullOrEmpty(file.Id?.ToString()))
+        {
+            try
+            {
+                // 1. 调用API删除物理文件
+                Http.DeleteAsync($"/api/Upload/{file.Id}");
+                
+                // 2. 返回true允许组件移除UI中的文件
+                return true;
+            }
+            catch
+            {
+                // 失败时阻止移除
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // 异步方法示例（推荐） 
+    private async Task<bool> HandleRemoveAsync(UploadFileItem file)
+    {
+        if (!string.IsNullOrEmpty(file.Id?.ToString()))
+        {
+            var response = await Http.DeleteAsync($"/api/Upload/{file.Id}");
+            return response.IsSuccessStatusCode; // 成功时返回true，否则false
+        }
+        return false;
+    }
+
+    // 错误信息提取方法
+    private string GetErrorMessage(object response)
+    {
+        if (response is string str) return str;
+        return response?.ToString() ?? "未知错误";
+    }
+}

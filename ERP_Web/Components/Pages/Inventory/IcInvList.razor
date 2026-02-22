@@ -1,0 +1,708 @@
+﻿@page "/invlist2"
+
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json;
+@using ERP_Web.Repository.Implement
+@using BlazorDownloadFile
+@inject IBlazorDownloadFileService DFS
+@using NPOI.SS.UserModel;
+@using NPOI.XSSF.UserModel;
+@using System.Data
+@using System.Collections.Generic;
+@using System.IO;
+@using System.Linq;
+@using M = ERP_Web.Models
+@using ERP_Web.Repository
+
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Forms;
+@using System.Reflection
+
+<PageTitle>IcInvList</PageTitle>
+<Button OnClick="addNew" Type="ButtonType.Primary" Style="margin-bottom:16px"> 新增存货</Button>
+<Button OnClick="refresh" Type="ButtonType.Primary" Style="margin-bottom:16px">刷新</Button>
+<Button class="ant-btn" Icon="@IconType.Outline.Download" OnClick="DownloadFileAsync">导出</Button>
+
+
+@* 单独新建 *@
+@*  @if (isvisible == false)
+{ }
+else
+{
+    <Form Model="@AddIcInv" ValidateMode="FormValidateMode.Complex"
+          OnFinish="OnFinish" OnFinishFailed="OnFinishFailed"
+          LabelColSpan="0" WrapperColSpan="0">
+        <FormItem Label="" Name="@nameof(context.IcInvList)" Rules="[new(){ Min=1 }]"
+                  LabelColSpan="0"
+                  WrapperColSpan="0">
+            <Button OnClick="addRow2" Type="ButtonType.Primary" Style="margin-bottom:16px">
+                Add a row
+            </Button>
+            <Table DataSource="context.IcInvList" TItem="M.IcInv" Context="row" Size="TableSize.Small" HidePagination Bordered>
+                <PropertyColumn Property="c=>c.Code">
+                    <FormItem Required>
+                        <Input @bind-Value="@row.Code" />
+                    </FormItem>
+                </PropertyColumn>
+                <PropertyColumn Property="c=>c.Name">
+                    <FormItem Required>
+                        <Input @bind-Value="@row.Name" />
+                    </FormItem>
+                </PropertyColumn>
+                <PropertyColumn Property="c=>c.Specification">
+                    <FormItem Required>
+                        <Input @bind-Value="@row.Specification" />
+                    </FormItem>
+                </PropertyColumn>
+                <PropertyColumn Property="c=>c.Unit">
+                    <FormItem Required>
+                        <Input @bind-Value="@row.Unit" />
+                    </FormItem>
+                </PropertyColumn>
+                <PropertyColumn Property="c=>c.Category">
+                    <FormItem Required>
+
+                                <SimpleSelect @bind-Value=@row.CategoryCode Style="width: 200px;" OnSelectedItemChanged="()=> OnItemChanged(row)">
+                                    <SelectOptions>
+                                        @foreach (M.Category item in categories)
+                                        {
+                                            <SimpleSelectOption Value="@item.Code" Label="@(item.Code+"."+item.Name)"></SimpleSelectOption>
+                                        }
+                                    </SelectOptions>
+                                </SimpleSelect>
+
+                    </FormItem>
+                </PropertyColumn>
+            </Table>
+        </FormItem>
+        <FormItem WrapperColOffset="8" WrapperColSpan="16">
+            <Button Type="@ButtonType.Primary" HtmlType="submit">
+                Submit
+            </Button>
+        </FormItem>
+    </Form>
+} *@
+<style>
+    .ant-form-item-has-error .ant-table {
+        border: 1px solid red;
+    }
+</style>
+
+@* 批量导入 *@
+@* <InputFile id="fileInput" OnChange="LoadFiles" hidden multiple />
+
+<Upload FileList="fileList">
+    <label class="ant-btn" for="fileInput">
+        <Icon Type="@IconType.Outline.Upload" />
+        导入
+    </label>
+</Upload> *@
+
+
+@* @if (ImportIcInvs.Count > 0)
+{
+    <Button OnClick="save" Type="ButtonType.Primary" Style="margin-bottom:16px">保存</Button>
+    <Button OnClick="cancel" Type="ButtonType.Primary" Style="margin-bottom:16px">取消</Button>
+
+    <div>
+        <Table DataSource="ImportIcInvs" RowClassName="@(_ => "editable-row")" Bordered PageSize="30"
+               @bind-SelectedRows="_selectedRows" Size="TableSize.Small">
+            <Selection />           
+             <PropertyColumn Width="15%" Property="c => c.Code" Sortable>
+                @if (editCode == context.Code)
+                {
+                    <Input @bind-Value="context.Code" OnBlur="stopEdit" AutoFocus />
+                }
+                else
+                {
+                    <div class="editable-cell-value-wrap" style="padding-right:24px" @onclick="() => startEdit(context.Code)">
+                        @context.Code
+                    </div>
+                }
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Name">
+                @if (editCode == context.Code)
+                {
+                    <Input @bind-Value="context.Name" OnBlur="stopEdit" AutoFocus />
+                }
+                else
+                {
+                    <div class="editable-cell-value-wrap" style="padding-right:24px" @onclick="() => startEdit(context.Code)">
+                        @context.Name
+                    </div>
+                }
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Specification"></PropertyColumn>
+            <PropertyColumn Property="c => c.Unit"></PropertyColumn>
+            <PropertyColumn Property="c => c.CategoryCode"></PropertyColumn>
+            <PropertyColumn Property="c => c.Category.Name"></PropertyColumn>
+
+            <ActionColumn Title="Action">
+                <Popconfirm Title="Sure to delete?"
+                            OnConfirm="()=> DeleteById(context.Code)"
+                            OkText="Yes"
+                            CancelText="No">
+                    <a>Delete</a>
+                </Popconfirm>
+            </ActionColumn>
+        </Table>
+    </div>
+} *@
+
+@code {
+    private List<IBrowserFile> loadedFiles = [];
+    private long maxFileSize = 1024 * 15;  //15MB
+    private int maxAllowedFiles = 3;
+    private bool isLoading;
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+        loadedFiles.Clear();
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            try
+            {
+                loadedFiles.Add(file);
+
+                // var path = "D:/MyObject/BlazorWebA_excle/upload";
+                // if (!Directory.Exists(path))
+                // {
+                //     Directory.CreateDirectory(path);
+                // }
+
+                // var fileName = file.Name;
+
+                // await using FileStream fs = new(path, FileMode.Create);
+                // await e.File.OpenReadStream(maxFileSize).CopyToAsync(fs);
+
+                using var memoryStream = new MemoryStream();
+                await file.OpenReadStream(maxFileSize).CopyToAsync(memoryStream);
+                var smallFileByteArray = memoryStream.ToArray();
+
+                DataTable dtTable = new DataTable();
+                List<string> rowList = new List<string>();
+                ISheet sheet;
+                memoryStream.Position = 0;
+                XSSFWorkbook xssWorkbook = new XSSFWorkbook(memoryStream);
+                sheet = xssWorkbook.GetSheetAt(0);
+                IRow headerRow = sheet.GetRow(0);
+                int cellCount = headerRow.LastCellNum;
+
+                for (int j = 0; j < cellCount; j++)
+                {
+                    ICell cell = headerRow.GetCell(j);
+                    DataColumn column;
+                    if (cell == null || string.IsNullOrWhiteSpace(cell.ToString())) continue;
+                    {
+                        column = new DataColumn();
+                        column.DataType = System.Type.GetType("System.String");
+                        column.ColumnName = cell.ToString();
+                        column.ReadOnly = false;
+                        column.Unique = false;
+                        // Add the Column to the DataColumnCollection.
+                        dtTable.Columns.Add(column);
+                        // Console.WriteLine($"Success:{JsonSerializer.Serialize(dtTable)}");
+                    }
+                }
+                for (int i = (sheet.FirstRowNum + 1); i <= sheet.LastRowNum; i++)
+                {
+                    IRow row = sheet.GetRow(i);
+                    if (row == null) continue;
+                    if (row.Cells.All(d => d.CellType == CellType.Blank)) continue;
+
+                    DataRow Drow;
+                    Drow = dtTable.NewRow();
+
+                    for (int j = row.FirstCellNum; j < cellCount; j++)
+                    {
+                        if (row.GetCell(j) != null)
+                        {
+                            if (!string.IsNullOrEmpty(row.GetCell(j).ToString()) && !string.IsNullOrWhiteSpace(row.GetCell(j).ToString()))
+                            {
+                                Drow[j] = row.GetCell(j).ToString();
+                            }
+                        }
+                    }
+                    dtTable.Rows.Add(Drow);
+                }
+
+                ImportIcInvs = ConvertToModel(dtTable);
+                DbIcInvs = ImportIcInvs;
+
+                Console.WriteLine($"Success:{JsonSerializer.Serialize(ImportIcInvs)}");
+
+                // isLoading = false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("File: {FileName} Error: {Error}",
+                    file.Name, ex.Message);
+            }
+        }
+        isLoading = false;
+        //refresh();
+
+    }
+
+    public static List<M.IcInv> ConvertToModel(DataTable dt)
+    {
+        List<M.IcInv> ts = new List<M.IcInv>();
+        List<M.Category> CategoryList = new List<M.Category>();
+        CategoryList = SqlSugarHelper.Db.Queryable<M.Category>().ToList();
+
+        foreach (DataRow dr in dt.Rows)
+        {
+            M.IcInv t = new M.IcInv();
+            DateTime dateTime = DateTime.Now;
+
+            PropertyInfo[] propertys = t.GetType().GetProperties();// 获得此模型的公共属性
+            foreach (PropertyInfo pi in propertys)
+            {
+                if (dt.Columns.Contains(pi.Name))
+                {
+                    if (!pi.CanWrite) continue;
+                    var value = dr[pi.Name];
+                    if (value != DBNull.Value)
+                    {
+                        switch (pi.PropertyType.FullName)
+                        {
+                            case "System.Decimal":
+                                pi.SetValue(t, decimal.Parse(value.ToString()), null);
+                                break;
+                            case "System.String":
+                                pi.SetValue(t, value.ToString(), null);
+                                break;
+                            case "System.Int32":
+                                pi.SetValue(t, int.Parse(value.ToString()), null);
+                                break;
+                            case "System.DateTime":
+                                pi.SetValue(t, DateTime.Parse(value.ToString()), null);
+                                break;
+                            case "System.Boolean":
+                                pi.SetValue(t, value.ToString() == "1" ? true : false, null);
+                                break;
+                            default:
+                                pi.SetValue(t, value, null);
+                                break;
+                        }
+                    }
+                }
+            }
+
+            t.Category = CategoryList.FirstOrDefault(x => x.Code == t.CategoryCode);
+
+            if (t.Category == null)
+            {
+                t.CategoryCode = "1";
+                t.Category = new M.Category() { Id = 1, Name = "未知分类" };
+            }
+            ts.Add(t);
+        }
+        return ts;
+    }
+
+    public static class ToModel<T> where T : new()
+    {
+        /// <summary>
+        /// 将DataTable数据源转换成实体类
+        /// </summary>
+        public static List<T> ConvertToModel(DataTable dt)
+        {
+            List<T> ts = new List<T>();
+            foreach (DataRow dr in dt.Rows)
+            {
+                T t = new T();
+                PropertyInfo[] propertys = t.GetType().GetProperties();// 获得此模型的公共属性
+                foreach (PropertyInfo pi in propertys)
+                {
+                    if (dt.Columns.Contains(pi.Name))
+                    {
+                        if (!pi.CanWrite) continue;
+                        var value = dr[pi.Name];
+                        if (value != DBNull.Value)
+                        {
+                            switch (pi.PropertyType.FullName)
+                            {
+                                case "System.Decimal":
+                                    pi.SetValue(t, decimal.Parse(value.ToString()), null);
+                                    break;
+                                case "System.String":
+                                    pi.SetValue(t, value.ToString(), null);
+                                    break;
+                                case "System.Int32":
+                                    pi.SetValue(t, int.Parse(value.ToString()), null);
+                                    break;
+                                default:
+                                    pi.SetValue(t, value, null);
+                                    break;
+                            }
+                        }
+                    }
+                }
+                ts.Add(t);
+            }
+            return ts;
+        }
+    }
+}
+
+@* 数据库中数据展示 *@
+@*
+<div>
+    <Table DataSource="DbIcInvs" RowClassName="@(_ => "editable-row")" Bordered PageSize="30"
+           @bind-SelectedRows="_selectedRows" Size="TableSize.Small">
+        <Selection />
+        <PropertyColumn Width="10px" Property="c => c.Code" Sortable DefaultSortOrder="@SortDirection.Ascending"></PropertyColumn>
+        <PropertyColumn Width="15%" Property="c => c.Code" Sortable>
+            @if (editCode == context.Code)
+            {
+                <Input @bind-Value="context.Code" OnBlur="stopEdit" AutoFocus />
+            }
+            else
+            {
+                <div class="editable-cell-value-wrap" style="padding-right:24px" @onclick="() => startEdit(context.Code)">
+                    @context.Code
+                </div>
+            }
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Name">
+            @if (editCode == context.Code)
+            {
+                <Input @bind-Value="context.Name" OnBlur="stopEdit" AutoFocus />
+            }
+            else
+            {
+                <div class="editable-cell-value-wrap" style="padding-right:24px" @onclick="() => startEdit(context.Code)">
+                    @context.Name
+                </div>
+            }
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Specification"></PropertyColumn>
+        <PropertyColumn Property="c => c.Unit"></PropertyColumn>
+        <PropertyColumn Property="c => c.CategoryCode"></PropertyColumn>
+         <PropertyColumn Property="c => c.Category.Name"></PropertyColumn>
+        <ActionColumn Title="Action">
+            <Popconfirm Title="Sure to delete?"
+                        OnConfirm="()=> DeleteById(context.Code)"
+                        OkText="Yes"
+                        CancelText="No">
+                <a>Delete</a>
+            </Popconfirm>
+        </ActionColumn>
+    </Table>
+</div>
+*@
+@code{
+    IcInvRepository IcInvRepository = new IcInvRepository();
+    List<UploadFileItem> fileList = new List<UploadFileItem>();
+    List<M.IcInv> DbIcInvs = new();
+    List<M.IcInv> AddDb = new();
+    List<M.IcInv> ImportIcInvs = new();
+
+    List<M.Category> Categorys = new();
+    int i = 0;
+    string editCode;
+    private Model AddIcInv = new Model();
+    public List<M.Category> categories = new();
+    public class Model
+    {
+        // [Required]
+        //public string ClassName { get; set; }
+        [Display(Name = "存货")]
+        public List<M.IcInv> IcInvList { get; set; } = [];
+        public void clear()
+        {
+            IcInvList.Clear();
+        }
+    }
+
+    private List<M.IcInv> ListOfIcInv;
+
+    IEnumerable<M.IcInv> _selectedRows = [];
+    AntDesign.ITable? _table;
+
+    //List<M.IcInv>? _dataSource;
+    int _total;
+    bool isvisible;
+
+    protected override void OnInitialized()
+    {
+        OnInitializedImport();
+
+        SqlClient SSC = new SqlClient();
+        isvisible = false;
+        DbIcInvs = SSC.Db.Queryable<Models.IcInv>().Includes(x => x.Category).Where(y => String.IsNullOrEmpty(y.Category.Name) == false).ToList();
+        categories = SSC.Db.Queryable<Models.Category>().ToList();
+    }
+
+    private void OnFinish(EditContext editContext)
+    {
+        IcInvRepository.Add(AddIcInv.IcInvList);
+        AddIcInv.clear();
+        addRow2();
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(AddIcInv)}");
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        Console.WriteLine($"Failed:{JsonSerializer.Serialize(AddIcInv)}");
+    }
+
+
+    void refresh()
+    {
+        DbIcInvs = SqlSugarHelper.Db.Queryable<Models.IcInv>()
+        .Includes(z => z.Category).Where(zx => String.IsNullOrEmpty(zx.Category.Name) == false).ToList();
+    }
+
+    void addNew()
+    {
+        if (isvisible == false)
+        {
+            isvisible = true;
+            addRow2();
+        }
+        else
+        {
+            isvisible = false;
+            AddIcInv.clear();
+        }
+    }
+
+    void addRow2()
+    {
+        AddIcInv.IcInvList.Add(new());
+    }
+
+    void addRow()
+    {
+        M.IcInv new1 = new() { Code = "01", Name = "" };
+
+        DbIcInvs.Add(new1);
+        i++;
+    }
+
+    void deleteRow(string id)
+    {
+        //listOfData = listOfData.Where(d => d.Id != id).ToArray();
+    }
+    void DeleteById(string Code)
+    {
+        IcInvRepository.Delete(Code);
+        DbIcInvs = IcInvRepository.GetList();
+    }
+
+    void startEdit(string Code)
+    {
+        editCode = Code;
+    }
+
+    void stopEdit()
+    {
+        var editedData = DbIcInvs.FirstOrDefault(x => x.Code == editCode);
+        if (editedData.Code != null)
+        {
+            IcInvRepository.Update(editedData);
+            Console.WriteLine(JsonSerializer.Serialize(editedData));
+        }
+        else
+        {
+            AddDb.Add(editedData);
+            Console.WriteLine(JsonSerializer.Serialize(editedData));
+        }
+        //editId = -100;
+    }
+
+    void save()
+    {
+        int res;
+        res = SqlSugarHelper.Db.Insertable(ImportIcInvs).ExecuteCommand();
+    }
+
+    void cancel()
+    {
+        ImportIcInvs.Clear();
+    }
+
+    public async Task DownloadFileAsync2()
+    {
+        // DataTable dataTable = ToDataTable(DbIcInvs);
+        XSSFWorkbook workbook = new XSSFWorkbook();
+        var sheet = workbook.CreateSheet("Sheet1");
+        var headerRow = sheet.CreateRow(0);
+        // for (int i = 0; i < dataTable.Columns.Count; i++)
+        // {
+        //     headerRow.CreateCell(i).SetCellValue(dataTable.Columns[i].ColumnName);
+        // }
+        // for (int i = 0; i < dataTable.Rows.Count; i++)
+        // {
+        //     var dataRow = sheet.CreateRow(i + 1);
+        //     for (int j = 0; j < dataTable.Columns.Count; j++)
+        //     {
+        //         dataRow.CreateCell(j).SetCellValue(dataTable.Rows[i][j]?.ToString() ?? string.Empty);
+        //     }
+        // }
+
+        // if (!Directory.Exists(path))
+        // {
+        //     Directory.CreateDirectory(path);
+        // }
+
+        // var fileName = "存货档案.xlsx";
+        // var filePath = System.IO.Path.Combine(path, fileName);
+
+        // await using FileStream fs = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite);
+        // // fs.Write(smallFileByteArray, 0, smallFileByteArray.Length);
+        // workbook.Write(fs, true); // 添加 True 保持数据流打开
+        // // workbook.Close(); // 关闭工作簿
+        // // workbook.Dispose(); // 释放工作簿
+        // // var x = fs.Position;
+        // // await BlazorDownloadFileService.DownloadFile("存货分类.xlsx", smallFileByteArray, "application/octet-stream");
+        // await DFS.DownloadFile(fileName, fs, "application/octet-stream"); //可以发送字节，也可以发送流，但是必须发送后关闭流
+        // fs.Flush();//清除缓冲区
+        // fs.Close();//关闭
+        // fs.Dispose();//释放
+    }
+
+
+    private void OnItemChanged(M.IcInv row)
+    {
+        //categories = categoryRepository.GetList();
+        row.CategoryCode = row.CategoryCode;
+        row.Category = row.Category;
+
+        Console.WriteLine($"{row.CategoryCode}");
+        Console.WriteLine($"{row.Category}");
+    }
+}
+
+@* 导出 *@
+@code {
+    public List<M.IcInv> icInvs = new();
+    public string path;
+    public string file;
+    public string fileName;
+    void OnInitializedImport()
+    {
+        path = "D:/ComputerScience/Git/down";
+        if (!Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+        }
+    }
+
+    public async Task DownloadFileAsync()
+    {
+        DataTable dataTable = ToDataTable(DbIcInvs);
+        XSSFWorkbook workbook = new XSSFWorkbook();
+        var sheet = workbook.CreateSheet("Sheet1");
+        var headerRow = sheet.CreateRow(0);
+        for (int i = 0; i < dataTable.Columns.Count; i++)
+        {
+            headerRow.CreateCell(i).SetCellValue(dataTable.Columns[i].ColumnName);
+        }
+        for (int i = 0; i < dataTable.Rows.Count; i++)
+        {
+            var dataRow = sheet.CreateRow(i + 1);
+            for (int j = 0; j < dataTable.Columns.Count; j++)
+            {
+                dataRow.CreateCell(j).SetCellValue(dataTable.Rows[i][j]?.ToString() ?? string.Empty);
+            }
+        }
+
+        if (!Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+        }
+
+        var fileName = "存货档案.xlsx";
+        var filePath = System.IO.Path.Combine(path, fileName);
+
+        await using FileStream fs = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite);
+        // fs.Write(smallFileByteArray, 0, smallFileByteArray.Length);
+        workbook.Write(fs,true); // 添加 True 保持数据流打开
+        workbook.Close(); // 关闭工作簿
+        workbook.Dispose(); // 释放工作簿
+        // var x = fs.Position;
+        // await BlazorDownloadFileService.DownloadFile("存货分类.xlsx", smallFileByteArray, "application/octet-stream");
+        await DFS.DownloadFile(fileName, fs, "application/octet-stream"); //可以发送字节，也可以发送流，但是必须发送后关闭流
+        fs.Flush();//清除缓冲区
+        fs.Close();//关闭
+        fs.Dispose();//释放
+    }
+
+    public DataTable ToDataTable(List<M.IcInv> entities)
+    {
+        DataTable dataTable = new DataTable("IcInv");
+        M.IcInv t = new M.IcInv();
+        PropertyInfo[] properties = t.GetType().GetProperties();// 获得此模型的公共属性
+
+        foreach (PropertyInfo propInfo in properties)
+        {   
+            if (propInfo.Name == "CategoryName")
+            {
+                dataTable.Columns.Add(propInfo.Name, typeof(System.String));//
+            }
+            else
+            {
+                dataTable.Columns.Add(propInfo.Name, propInfo.PropertyType);
+            }
+        }
+
+        foreach (M.IcInv entity in entities)
+        {
+            object[] values = new object[properties.Length];
+            for (int i = 0; i < properties.Length; i++)
+            {
+                if (properties[i].Name == "CategoryName")
+                {
+                    values[i] = entity.Category.Name;  // 只获取 CategoryName 属性的值
+                }
+                else
+                {
+                    values[i] = properties[i].GetValue(entity);
+                }
+            }
+            dataTable.Rows.Add(values);
+        }
+        return dataTable;
+    }
+
+
+    // public static class EntityExtensions
+    // {
+    //     public static DataTable ToDataTable<T>(this T[] entities)
+    //     {
+    //         DataTable dataTable = new DataTable(typeof(T).Name);
+
+    //         PropertyInfo[] properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+    //         foreach (PropertyInfo propInfo in properties)
+    //         {
+    //             dataTable.Columns.Add(propInfo.Name, propInfo.PropertyType);
+    //         }
+
+    //         foreach (T entity in entities)
+    //         {
+    //             object[] values = new object[properties.Length];
+    //             for (int i = 0; i < properties.Length; i++)
+    //             {
+    //                 values[i] = properties[i].GetValue(entity);
+    //             }
+
+    //             dataTable.Rows.Add(values);
+    //         }
+
+    //         return dataTable;
+    //     }
+    // }
+}

@@ -1,0 +1,179 @@
+﻿@page "/hr/transfer"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AntDesign.TableModels
+@using ERP_Web.Models
+@using ERP_Web.Models.HRMS
+@using ERP_Web.Repository
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+
+<h3>人事异动</h3>
+<Form Model="@FilterModel">
+    <GridRow gutter="@gutter">
+        <GridCol Span="6">
+            <FormItem Label="异动类型">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择类型"
+                        @bind-Value="@TypeFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    <SelectOption TItemValue="int?" TItem="int?" Value="0" Label="转正" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="1" Label="调岗" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="2" Label="升职" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="3" Label="降职" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="4" Label="离职" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="审批状态">
+                <Select Mode="SelectMode.Default"
+                        Placeholder="请选择状态"
+                        @bind-Value="@StatusFilter"
+                        TItemValue="int?"
+                        TItem="int?"
+                        AllowClear>
+                    <SelectOption TItemValue="int?" TItem="int?" Value="0" Label="待审批" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="1" Label="已通过" />
+                    <SelectOption TItemValue="int?" TItem="int?" Value="2" Label="已驳回" />
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="生效日期">
+                <RangePicker TValue="DateOnly?[]" Format="yyyy-MM-dd" @bind-Value="DateOnlys" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="6">
+            <FormItem Label="员工姓名">
+                <Input @bind-Value="@Keyword" Placeholder="请输入员工姓名" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2">
+            <Button OnClick="Refresh" Icon="@IconType.Outline.Search" Type="@ButtonType.Primary" HtmlType="button">
+                搜索
+            </Button>
+        </GridCol>
+    </GridRow>
+</Form>
+
+<Table DataSource="@data" TItem="EmployeeTransfer" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+       Resizable
+       HidePagination Bordered
+       ScrollX="1800" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => c.Code" Title="异动单号" Width="120" Fixed="ColumnFixPlacement.Left" />
+    <PropertyColumn Property="c => c.Employee.Name" Title="员工姓名" Width="100">
+        @row.Employee?.Name ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.TransferType" Title="异动类型" Width="100">
+        <Tag>@row.GetTransferTypeDisplayName()</Tag>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.OldDepartment.Name" Title="原部门" Width="120">
+        @row.OldDepartment?.Name ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.NewDepartment.Name" Title="新部门" Width="120">
+        @row.NewDepartment?.Name ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.OldPosition" Title="原职位" Width="120">
+        @row.OldPosition ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.NewPosition" Title="新职位" Width="120">
+        @row.NewPosition ?? "-"
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.EffectiveDate" Title="生效日期" Width="120">
+        @row.EffectiveDate.ToString("yyyy-MM-dd")
+    </PropertyColumn>
+    <ActionColumn Title="审批状态" Width="100">
+        <Tag Color="@(row.ApprovalStatus switch {
+            0 => "orange",
+            1 => "green",
+            2 => "red",
+            _ => "default"
+        })">
+            @row.GetApprovalStatusDisplayName()
+        </Tag>
+    </ActionColumn>
+    <PropertyColumn Property="c => c.Approver" Title="审批人" Width="100" />
+    <PropertyColumn Property="c => c.InsertTime" Title="申请时间" Width="160" />
+
+    <ActionColumn Title="操作" Width="180" Fixed="ColumnFixPlacement.Right">
+        <Space Size="SpaceSize.Small">
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small" Disabled="@(row.ApprovalStatus != 0)">审批</Button>
+            <Button Type="ButtonType.Link" Size="ButtonSize.Small">查看</Button>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    DateOnly?[] DateOnlys = new DateOnly?[2];
+    int? TypeFilter;
+    int? StatusFilter;
+    string Keyword;
+    EmployeeTransfer FilterModel = new EmployeeTransfer();
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    List<EmployeeTransfer> data = new List<EmployeeTransfer>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    public async Task Refresh()
+    {
+        try
+        {
+            SqlClient SSC = new SqlClient();
+            var query = SSC.Db.Queryable<EmployeeTransfer>()
+                .Includes(t => t.Employee)
+                .Includes(t => t.OldDepartment)
+                .Includes(t => t.NewDepartment)
+                .Where(t => t.Active);
+
+            // 类型筛选
+            if (TypeFilter.HasValue)
+            {
+                query = query.Where(t => t.TransferType == TypeFilter.Value);
+            }
+
+            // 状态筛选
+            if (StatusFilter.HasValue)
+            {
+                query = query.Where(t => t.ApprovalStatus == StatusFilter.Value);
+            }
+
+            // 日期筛选
+            if (DateOnlys[0].HasValue)
+            {
+                query = query.Where(t => t.EffectiveDate >= DateOnlys[0].Value.ToDateTime(TimeOnly.MinValue));
+            }
+            if (DateOnlys[1].HasValue)
+            {
+                query = query.Where(t => t.EffectiveDate <= DateOnlys[1].Value.ToDateTime(TimeOnly.MaxValue));
+            }
+
+            // 姓名筛选
+            if (!string.IsNullOrEmpty(Keyword))
+            {
+                query = query.Where(t => t.Employee.Name.Contains(Keyword));
+            }
+
+            data = await query.OrderByDescending(t => t.InsertTime).ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"查询人事异动失败：{ex.Message}");
+            data = new List<EmployeeTransfer>();
+        }
+    }
+}

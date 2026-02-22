@@ -1,0 +1,1276 @@
+﻿@page "/PrView/{Text?}"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@inject IConfirmService _confirmService
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using ERP_Web.Components.Custom
+@using ERP_Web.Core.Utilities
+@using ERP_Web.Models
+@using ERP_Web.Core.Service
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+@using System.Text.Json;
+@inject HttpClient Http
+@inject MessageService Message
+@inject IUserContext UserContext
+
+
+<PageTitle>采购单</PageTitle>
+<h3>采购单</h3>
+<DynamicButtonGroup PageRoute="PrView" OnButtonClick="HandleButtonClick" />
+@code {
+    private SqlClient _sqlClient = new();
+    private bool _isProcessing = false;
+
+    private async Task HandleButtonClick(string actionName)
+    {
+        try
+        {
+            _isProcessing = true;
+            StateHasChanged();
+
+            switch (actionName)
+            {
+                case "Refresh":
+                    await RefreshAction();
+                    break;
+                case "Edit":
+                    await EditAction();
+                    break;
+                case "Submit":
+                    await SubmitAction();
+                    break;
+                case "Approve":
+                    await ApproveAction();
+                    break;
+                case "Reject":
+                    await RejectAction();
+                    break;
+                case "CreatePO":
+                    await CreatePOAction();
+                    break;
+                case "Withdraw":
+                    await Withdraw();
+                    break;
+                default:
+                    await HandleCustomAction(actionName);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowErrorModal($"操作失败: {ex.Message}");
+            Console.WriteLine($"{actionName}操作错误: {ex.Message}\n{ex.StackTrace}");
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    // 刷新操作：重新加载数据
+    private async Task RefreshAction()
+    {
+        // 重新加载采购单数据
+        Pr = _sqlClient.Db.Queryable<PurchaseRequisition>()
+            .IncludesAllFirstLayer()
+            .IncludesAllSecondLayer(xc => xc.PRInvInOuts)
+            .IncludesAllSecondLayer(xc => xc.ApprovalProcess)
+            .IncludesAllSecondLayer(xc => xc.ApprovalType)
+            .Includes(xc => xc.ApprovalType, ap => ap.Nodes, ap => ap.Approver)
+            .Includes(xc => xc.ApprovalProcess, ap => ap.Steps, ap => ap.ApprovalProcess)
+            .Where(it => it.Id == long.Parse(Text))
+            .First();
+
+        // 重置编辑状态
+        Enable = true;
+        IsVisible = false;
+
+        // 加载历史附件
+        await LoadAttachments();
+
+        ShowSuccessModal("数据刷新成功");
+    }
+
+    // 编辑操作：进入编辑模式
+    private async Task EditAction()
+    {
+        // 初始化关联数据
+        foreach (var row in Pr.PRInvInOuts)
+        {
+            row.Company ??= new Company();
+            row.Warehouse ??= new Warehouse();
+        }
+
+        // 设置编辑状态
+        Enable = false;
+        IsVisible = true;
+
+        // 预加载存货数据
+        _loading = true;
+        Invs = await Task.Run(() => 
+            _sqlClient.Db.Queryable<InventoryItem>().ToList());
+        _loading = false;
+
+        ShowInfoModal("进入编辑模式", "您现在可以修改采购单内容");
+    }
+
+    // 提交操作：提交保存采购单
+    private async Task SubmitAction()
+    {
+        // 验证数据
+        if (Pr.PRInvInOuts.Any(r => 
+            r.InventoryItem == null || 
+            string.IsNullOrEmpty(r.InventoryItem.Code)))
+        {
+            throw new Exception("存在未选择存货的行项");
+        }
+        // 保存数据
+        Pr.Sumit(_currentUser);
+
+        ShowSuccessModal("提交成功", "采购单已成功提交审批");
+    }
+
+    // 审批通过（适配Dictionary返回值）
+    private async Task ApproveAction()
+    {
+        try
+        {
+            string approveComment = string.Empty;
+            // 1. 构建带审批意见输入框的弹窗内容
+            RenderFragment content = builder =>
+            {
+                builder.OpenComponent<Input<string>>(0);
+                builder.AddAttribute(1, "Placeholder", "请输入审批意见（选填）");
+                builder.AddAttribute(2, "Value", approveComment);
+                builder.AddAttribute(3, "ValueChanged", EventCallback.Factory.Create<string>(this, val => approveComment = val));
+                builder.AddAttribute(4, "AutoFocus", true);
+                builder.CloseComponent();
+            };
+
+            // 2. 弹窗配置
+            string _okText = "确认通过";
+            string _cancelText = "取消";
+            string _title = "请输入审批意见";
+            var options = new ConfirmButtonOptions()
+            {
+                Button1Props = new AntDesign.ButtonProps() { ChildContent = _okText },
+                Button2Props = new AntDesign.ButtonProps() { ChildContent = _cancelText }
+            };
+
+            // 3. 弹出确认弹窗
+            var confirmResult = await _confirmService.Show(
+                content,
+                _title,
+                ConfirmButtons.OKCancel,
+                ConfirmIcon.Info,
+                options
+            );
+
+            if (confirmResult != ConfirmResult.OK)
+                return;
+
+            // 4. 调用后端方法，传入审批意见
+            Dictionary<bool, string> result = Pr.Approve(_currentUser, approveComment.Trim());
+
+            // 确保你的Pr.Approve方法已经同步改为返回Dictionary<bool, string>，和Reject方法格式一致
+            //Dictionary<bool, string> result = Pr.Approve(_currentUser);
+
+            // 方案1：直接判断是否包含成功key（推荐，更安全）
+            if (result.ContainsKey(true))
+            {
+                ShowSuccessModal("审批通过", result[true]);
+                await RefreshAction(); // 刷新页面状态
+            }
+            else
+            {
+                ShowWarningModal("审批未通过", result[false]);
+            }
+
+            // 方案2：取第一个键值对（适合固定只有一个键值对的场景）
+            // var res = result.First();
+            // if (res.Key)
+            // {
+            //     ShowSuccessModal("审批通过", res.Value);
+            //     await RefreshAction();
+            // }
+            // else
+            // {
+            //     ShowWarningModal("审批未通过", res.Value);
+            // }
+        }
+        catch (Exception ex)
+        {
+            ShowErrorModal($"审批失败: {ex.Message}");
+        }
+    }
+
+    // 定义成员变量保存选择的退回模式
+    private RejectMode _selectedRejectMode = RejectMode.ToDraft;
+    private async Task RejectAction()
+    {
+        try
+        {
+            string rejectReason = string.Empty;
+            string ChildContent1 = string.Empty, ChildContent2 = string.Empty;
+            //ChildContent  = $"您选择的退回模式是：{(_selectedRejectMode == RejectMode.ToDraft ? "退回草稿" : "退回上一级")}，请在下方输入拒绝原因并确认。";
+            ChildContent1 = $"全部退回（{(_selectedRejectMode == RejectMode.ToDraft ? "✓" : "")} 终止审批流程，修改后重新提交）" ?? "退回草稿";
+            ChildContent2 = $"退回上一级（{(_selectedRejectMode == RejectMode.ToPrevious ? "✓" : "")} 退回到上一个审批节点重新审批）" ?? "退回上一级";
+            // 1. 弹窗内容：输入框
+            RenderFragment content = builder =>
+            {
+                // builder.OpenComponent<Input<string>>(0);
+                // builder.AddAttribute(1, "Placeholder", "请输入拒绝原因（必填）");
+                // builder.AddAttribute(2, "Value", rejectReason);
+                // builder.AddAttribute(3, "ValueChanged", EventCallback.Factory.Create<string>(this, val => rejectReason = val));
+                // builder.AddAttribute(4, "AutoFocus", true);
+                // builder.CloseComponent();
+
+
+                //拒绝原因输入框
+                builder.OpenElement(0, "div");
+                builder.AddAttribute(1, "style", "margin-bottom:16px;");
+                builder.OpenComponent<Input<string>>(2);
+                builder.AddAttribute(3, "Placeholder", "请输入拒绝原因（必填）");
+                builder.AddAttribute(4, "Value", rejectReason);
+                builder.AddAttribute(5, "ValueChanged", EventCallback.Factory.Create<string>(this, val => rejectReason = val));
+                builder.AddAttribute(6, "AutoFocus", true);
+                builder.CloseComponent();
+                builder.CloseElement();
+
+
+                // 退回模式单选组
+                builder.OpenElement(10, "div");
+                builder.AddAttribute(11, "style", "padding:8px 0;");
+                builder.OpenComponent<RadioGroup<RejectMode>>(20);
+                builder.AddAttribute(21, "Value", _selectedRejectMode);
+                builder.AddAttribute(22, "ValueChanged", EventCallback.Factory.Create<RejectMode>(this, val => _selectedRejectMode = val));
+                // 两个选项
+                builder.AddAttribute(23, "ChildContent", (RenderFragment)(rb =>
+                {
+                    rb.OpenComponent<Radio<RejectMode>>(0);
+                    rb.AddAttribute(1, "Value", RejectMode.ToDraft);
+                    rb.AddAttribute(2, "ChildContent", (RenderFragment)(_xx =>
+                    {
+                        _xx.AddContent(1, ChildContent1);
+                    }));
+                    rb.CloseComponent();
+
+                    rb.OpenComponent<Radio<RejectMode>>(1);
+                    rb.AddAttribute(1, "Value", RejectMode.ToPrevious);
+                    rb.AddAttribute(2, "ChildContent", (RenderFragment)(_xx =>
+                      {
+                          _xx.AddContent(1, ChildContent2);
+                      }));
+                    rb.CloseComponent();
+                }));
+                builder.CloseComponent();
+                builder.CloseElement();
+            };
+
+            // 2. 弹窗图标
+            RenderFragment icon = @<Icon Type="@IconType.Outline.InfoCircle" Style="color:#faad14" />;
+            string _okText = "确认拒绝";
+            string _cancelText = "取消";
+            string _title = "请输入拒绝原因";
+            bool _visible = false;
+            var options = new ConfirmButtonOptions()
+            {
+                Button1Props = new AntDesign.ButtonProps()
+                {
+                    ChildContent = _okText
+                },
+                Button2Props = new AntDesign.ButtonProps()
+                {
+                    ChildContent = _cancelText
+                }
+            };
+            // 3. 弹出确认弹窗
+            var confirmResult = await
+                _confirmService.Show(
+                    content,
+                    _title,
+                    ConfirmButtons.OKCancel,
+                    ConfirmIcon.Info
+                    ,options
+                );
+
+            if (confirmResult != ConfirmResult.OK)
+                return;
+
+            // 校验拒绝原因
+            if (string.IsNullOrWhiteSpace(rejectReason))
+            {
+                ShowWarningModal("操作提示", "请输入拒绝原因");
+                return;
+            }
+
+            // 4. 调用后端方法，传入选择的退回模式
+            var result = Pr.Reject(_currentUser, rejectReason.Trim(), _selectedRejectMode);
+            if (result.ContainsKey(true))
+            {
+                ShowSuccessModal("审批拒绝", result[true]);
+                await RefreshAction();
+            }
+            else
+            {
+                ShowWarningModal("操作失败", result[false]);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowErrorModal($"拒绝失败: {ex.Message}");
+        }
+    }
+
+    // 生成采购订单
+    private async Task CreatePOAction()
+    {
+        if (Pr.Status != DocumentStatus.Approved)
+        {
+            throw new Exception("只有已审批的采购单才能生成采购订单");
+        }
+        
+        var purchaseOrders = Pr.ConvertToPurchaseOrders();
+        
+        // 事务处理确保所有订单创建成功
+        _sqlClient.Db.Ado.BeginTran();
+        try
+        {
+            foreach (var order in purchaseOrders)
+            {
+                order.Insert();
+            }
+            _sqlClient.Db.Ado.CommitTran();
+            
+            ShowSuccessModal("采购订单已生成", 
+                $"成功创建 {purchaseOrders.Count} 个采购订单");
+        }
+        catch
+        {
+            _sqlClient.Db.Ado.RollbackTran();
+            throw;
+        }
+    }
+
+    private async Task Withdraw()
+    {
+        if (Pr.Status != DocumentStatus.Approved)
+        {
+            throw new Exception("只有已审批的采购单才能生成采购订单");
+        }
+
+        var purchaseOrders = Pr.ConvertToPurchaseOrders();
+
+        // 事务处理确保所有订单创建成功
+        _sqlClient.Db.Ado.BeginTran();
+        try
+        {
+            foreach (var order in purchaseOrders)
+            {
+                order.Insert();
+            }
+            _sqlClient.Db.Ado.CommitTran();
+
+            ShowSuccessModal("采购订单已生成",
+                            $"成功创建 {purchaseOrders.Count} 个采购订单");
+        }
+        catch
+        {
+            _sqlClient.Db.Ado.RollbackTran();
+            throw;
+        }
+    }
+
+
+    // 处理自定义操作
+    private async Task HandleCustomAction(string actionName)
+    {
+        // 反射调用对应方法
+        var method = GetType().GetMethod($"{actionName}Action");
+        if (method != null)
+        {
+            await (Task)method.Invoke(this, null);
+            return;
+        }
+        
+        // 找不到对应方法时提示
+        ShowInfoModal("未实现操作", $"'{actionName}'功能尚未实现");
+    }
+
+    // 显示模态框的辅助方法
+    private void ShowSuccessModal(string title = "操作成功", string message = "")
+    {
+        Modal_Title = title;
+        Mes = string.IsNullOrEmpty(message) ? "操作已成功完成" : message;
+        Modal_visible = true;
+    }
+    private void ShowErrorModal(string message)
+    {
+        Modal_Title = "操作失败";
+        Mes = message;
+        Modal_visible = true;
+    }
+    
+    private void ShowWarningModal(string title, string message)
+    {
+        Modal_Title = title;
+        Mes = message;
+        Modal_visible = true;
+    }
+    
+    private void ShowInfoModal(string title, string message)
+    {
+        Modal_Title = title;
+        Mes = message;
+        Modal_visible = true;
+    }
+    
+    // 加载附件
+    private async Task LoadAttachments()
+    {
+        try
+        {
+            var attachments = await Http.GetFromJsonAsync<List<SysAttachment>>(
+                $"/api/Upload/GetAttachments?refCode={Pr.Code}&refType=PurchaseRequisition");
+                
+            _defaultFileList = attachments?.Select(a => new UploadFileItem
+            {
+                Id = a.Id.ToString(),
+                FileName = a.Name,
+                State = UploadState.Success,
+                Url = a.Path
+            }).ToList() ?? new List<UploadFileItem>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"加载附件失败: {ex.Message}");
+        }
+    }
+}
+
+<Modal Title="@Modal_Title"
+       OnOk="@HandleOk"
+       OnCancel="@HandleCancel"
+       @bind-Visible="@Modal_visible">
+    <p>@Mes</p>
+</Modal>
+
+@code {
+    private bool Modal_visible = false;
+    private string Modal_Title = "操作";
+
+    private string Mes = "操作成功";
+    private void HandleOk()
+    {
+    }
+
+    private void HandleCancel()
+    {
+        Modal_visible = false;
+    }
+
+    private void ModalOnFinish(EditContext editContext)
+    {
+        
+    }
+}
+
+@code
+{
+    private int _offsetTop = 80;
+    private void AddTop()
+    {
+        _offsetTop += 10;
+    }
+}
+<Form Model="@Pr"
+      OnFinish="OnFinish"
+      OnFinishFailed="OnFinishFailed"
+      LabelColSpan="0"
+      WrapperColSpan="0">
+
+    <GridRow gutter="@gutter">
+        <GridCol Class="gutter-row" Span="6" style="width: 180px">
+            <FormItem Label="代码">
+                <a>@Pr.Code</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="分类">
+                <a>@Pr.PoTrxGroup.Name</a>
+            </FormItem>
+
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6" style="width: 180px">
+            <FormItem Label="日期">
+                <a>@Pr.Date</a>
+            </FormItem>
+        </GridCol>
+
+        <GridCol Class="gutter-row" Span="6" style="width: 180px">
+            <FormItem Label="部门">
+                <a>@Pr.Department.Code</a><a>@Pr.Department.Name</a>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+    <GridRow gutter="@gutter">
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="数量">
+                <a>@Pr.Quantity</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="  金额  ">
+                <a>@Pr.Amount</a>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="  含税金额  ">
+                <a>@Pr.AmountIncTax</a>
+            </FormItem>
+        </GridCol>
+
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="单据状态">
+                <a>@Pr.GetStatusDisplayName()</a>
+            </FormItem>
+        </GridCol>
+
+    </GridRow>
+    <GridRow gutter="@gutter">
+        <GridCol Class="gutter-row" Span="12">
+            <FormItem Label="摘要">
+                <a>@Pr.Explanation</a>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+    <GridRow Gutter=@gutter>
+        <GridCol Class="gutter-row" Span="24">
+            <FormItem Label="附件">
+                <div class="attachments-container">
+                    <!-- 文件上传组件 -->
+                    <FileUpload RefCode="@Pr.Code"
+                                RefType="PurchaseRequisition"
+                                OnUploadSuccess="HandleUploadSuccess"
+                                OnRemoveSuccess="HandleRemoveSuccess"
+                                ShowButton="false"
+                                ShowRemoveIcon="false"
+                                Disabled="true" />
+                
+                    <!-- 历史附件展示 -->
+                    @if (_defaultFileList.Any())
+                    {
+                        <div class="files-grid">
+                            @foreach (var file in _defaultFileList)
+                            {
+                                <div class="file-card">
+                                    <div class="file-icon-container">
+                                        <Icon Type="file" Theme="IconThemeType.Outline" Class="file-icon" />
+                                    </div>
+                                    <div class="file-name">@file.FileName</div>
+                                    <a href="@file.Url" target="_blank" class="download-link">
+                                        <Icon Type="download" Theme="IconThemeType.Outline" />
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <GridRow gutter="@gutter">
+        @if (Pr.ApprovalProcess != null)
+        {
+            <GridCol Class="gutter-row" Span="24">
+                <!-- 替换原来的审批Steps代码块，直接引入新组件 -->
+                <ApprovalOperationTimeline Pr="@Pr" />
+            </GridCol>
+            <p></p>
+        }
+        else if (Pr.ApprovalType?.Nodes != null)
+        {
+            <GridCol Class="gutter-row" Span="@(Pr.ApprovalType?.Nodes?.Count <= 3 ? 14 : 24)">
+                <Steps StartIndex="0" Current="0" Class="site-navigation-steps">
+                    @foreach (var node in Pr.ApprovalType?.Nodes ?? Enumerable.Empty<ApprovalNode>())
+                    {
+                        <Step Title="@node.Role"
+                              Description="@node.Approver?.Name" />
+                    }
+                </Steps>
+            </GridCol>
+            <p></p>
+        }
+    </GridRow>
+
+    <Table DataSource="@Pr.PRInvInOuts" TItem="PRInvInOut" Context="row" Size="TableSize.Small" HidePagination Bordered ScrollX="1500" StickyOffsetHeader="64">
+        <PropertyColumn Property="c => c.InvCode" Title="代码" ColSpan="1" Width="100px">
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.InventoryItem.Name" Title="名称" Width="300px">
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Specification.Description" Title="规格" Width="300px">
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Specification.Unit" Title="单位" Width="50px">
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Quantity" Title="数量" Width="100px">
+            <a> @Math.Round(@row.Quantity, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Price" Title="单价" Width="100px">
+            <a> @Math.Round(@row.Price, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Amount" Title="金额" Width="100px">
+            <a> @Math.Round(@row.Amount, 2)</a>
+        </PropertyColumn>
+
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.TaxRate" Title="税率" Width="100px">
+            <a> @Math.Round(@row.TaxRate, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.PriceIncTax" Title="含税单价" Width="100px">
+            <a> @Math.Round(@row.PriceIncTax, 2)</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Right" Property="c => c.Amount" Title="含税金额" Width="100px">
+            <a> @Math.Round(@row.Amount, 2)</a>
+        </PropertyColumn>
+
+        <PropertyColumn Align="ColumnAlign.Left" Property="c => c.Company" Title="供应商" Width="100px">
+            <a> @row.Company?.Name</a>
+        </PropertyColumn>
+        <PropertyColumn Align="ColumnAlign.Left" Property="c => c.Warehouse" Title="仓库" Width="100px">
+            <a> @row.Warehouse?.Name</a>
+        </PropertyColumn>
+
+        <SummaryRow>
+            <SummaryCell ColSpan="3">Total</SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger"> </Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger" style="align-content">@Math.Round(Pr.Quantity, 2)</Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger" style="text-align"></Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger" style="text-align">@Math.Round(Pr.Amount, 2)</Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger" style="text-align"></Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger" style="text-align"></Text>
+            </SummaryCell>
+            <SummaryCell>
+                <Text Type="TextElementType.Danger">@Math.Round(Pr.AmountIncTax, 2)</Text>
+            </SummaryCell>
+
+        </SummaryRow>
+        <SummaryRow>
+            <SummaryCell>Balance</SummaryCell>
+            <SummaryCell ColSpan="2">
+                <Text Type="TextElementType.Danger"> 制单人:@Pr.Operator </Text>
+            </SummaryCell>
+            <SummaryCell ColSpan="4">
+                <Text Type="TextElementType.Danger"> 审批人:@Pr.Checker </Text>
+            </SummaryCell>
+            <SummaryCell ColSpan="3">
+                <Text Type="TextElementType.Danger"> 记账人:@Pr.Poster </Text>
+            </SummaryCell>
+        </SummaryRow>
+    </Table>
+    <p></p>
+    @if (@IsVisible == true)
+    {
+        <Button OnClick="addRow" Type="ButtonType.Primary" Style="margin-bottom:16px" Size="ButtonSize.Small" Disabled=@Enable>
+            插入行
+        </Button>
+        <Table DataSource="@Pr.PRInvInOuts" TItem="PRInvInOut" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+               OnRowClick="@OnRowClick"
+               Bordered
+               Resizable
+               HidePagination
+               ScrollX="1500" StickyOffsetHeader="64">
+            <PropertyColumn Property="c => Pr.PRInvInOuts.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35"> </PropertyColumn>
+            <PropertyColumn Property="c => c.InvCode" Title="存货" Width="120" Fixed="ColumnFixPlacement.Left">
+                <Input @bind-Value="row.InvCode" />
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.InventoryItem.Name" Title="存货名称" Width="150" Fixed="ColumnFixPlacement.Left">
+                <Select DataSource="@Invs"
+                        @bind-SelectedItem="row.InventoryItem"
+                        EnableSearch
+                        EnableVirtualization=true
+                        LabelName="@nameof(InventoryItem.Name)"
+                        TItemValue="InventoryItem"
+                        TItem="InventoryItem"
+                        Placeholder="@(row.InventoryItem?.Name == null ? "输入存货名称" : row.InventoryItem.Name)"
+                        ShowArrowIcon="true"
+                        HideSelected
+                        SearchDebounceMilliseconds="350"
+                        Loading="_loading"
+                        OnSearch="@(async (value) => await InvOnSearch(value))"
+                        OnSelectedItemChanged="OnSelectedItemChangedHandler">
+                </Select>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Specification.Description" Title="规格" Width="200" Ellipsis>
+                <Select DataSource="row.InventoryItem.Specifications"
+                        @bind-SelectedItem="row.Specification"
+                        @bind-Value="row.Specification"
+                        LabelName="@nameof(Specification.Description)"
+                        TItemValue="Specification"
+                        TItem="Specification"
+                        Placeholder="@(row.Specification.Description == null ? "输入存货名称" : row.Specification.Description)"
+                        ShowArrowIcon="true"
+                        SearchDebounceMilliseconds="350"
+                        Loading="_loading"
+                        OnSelectedItemChanged="@(value => SpeChanged(row,value))">
+                    <DropdownRender Context="originNode">
+                        <div>
+                            @originNode
+                            <Divider Style="margin: 4px 0"></Divider>
+                            <div style="display: flex; flex-wrap: nowrap; padding: 8px">
+                                <Input Style="flex: auto" @bind-Value="@SpeDesc" />
+                                <a style="flex: none; padding: 8px; display: block; cursor: pointer" @onclick="@(value => AddItem(row, value))">
+                                    <Icon Type="@IconType.Outline.Plus" />
+                                    Add Item
+                                </a>
+                            </div>
+                        </div>
+                    </DropdownRender>
+                </Select>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Specification.Unit" Title="单位" Width="150" Ellipsis>
+                @if (row.InventoryItem.Name != null && row.InventoryItem.Name != string.Empty && (row.Specification.Unit == null || row.Specification.Unit == string.Empty))
+                {
+                    <Input @bind-Value="@row.Specification.Unit">
+                    }
+                    else
+                    {
+                        <a>@row.Specification.Unit</a>
+                    }
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.Quantity" Precision="2" Min="0" Bordered="false" @bind-Value:after="() => row.QuantityChange()" Width="140px" Style="text-align: right" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Price" Title="单价" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.Price" Bordered="false" Precision="4" Min="0" AutoSize=1 @bind-Value:after="() => row.PriceChange()" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.Amount" Precision="4" Bordered="false" @bind-Value:after="() => row.PriceChange()" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.TaxRate" Title="税率" Align="ColumnAlign.Right" Width="80">
+                    <AntDesign.InputNumber Step=0.01M Min="0" Max="1" @bind-Value="row.TaxRate" Bordered="false" @bind-Value:after="() => row.PriceIncTaxChange()" Width="70" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.PriceIncTax" Title="含税单价" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.PriceIncTax" Precision="4" Bordered="false" @bind-Value:after="() => row.PriceIncTaxChange()" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Align="ColumnAlign.Right" Width="200">
+                    <AntDesign.InputNumber @bind-Value="row.AmountIncTax" Precision="4" Bordered="false" @bind-Value:after="() => row.AmountIncTaxChange()" Width="190px" />
+                </PropertyColumn>
+
+                <PropertyColumn Property="c => c.Company" Title="供应商" Align="ColumnAlign.Left" Width="200">
+                    <Select DataSource="Companies"
+                            @bind-SelectedItem="row.Company"
+                            @bind-Value="row.Company"
+                            LabelName="@nameof(Company.Name)"
+                            TItemValue="Company"
+                            TItem="Company"
+                            Placeholder="@(row.Company.Name == null ? "选择供应商" : row.Company.Name)"
+                            ShowArrowIcon="true"
+                            SearchDebounceMilliseconds="350"
+                            Loading="_loading"
+                            OnSelectedItemChanged="@(value => CompanyChanged(row,value))">
+                    </Select>
+                </PropertyColumn>
+
+                <PropertyColumn Property="c => c.Warehouse" Title="仓库" Align="ColumnAlign.Right" Width="200">
+                    <Select DataSource="Warehouses"
+                            @bind-SelectedItem="row.Warehouse"
+                            @bind-Value="row.Warehouse"
+                            LabelName="@nameof(Warehouse.Name)"
+                            TItemValue="Warehouse"
+                            TItem="Warehouse"
+                            Placeholder="@(row.Warehouse.Name == null ? "选择仓库" : row.Warehouse.Name)"
+                            ShowArrowIcon="true"
+                            SearchDebounceMilliseconds="350"
+                            Loading="_loading"
+                            OnSelectedItemChanged="@(value => WarehouseChanged(row,value))">
+                    </Select>
+                </PropertyColumn>
+
+                <PropertyColumn Property="c => c.Note" Title="备注" Align="ColumnAlign.Center" Ellipsis>
+                    <AntDesign.Input @bind-Value="row.Note" Bordered="false" />
+                </PropertyColumn>
+            </Table>
+            <FormItem WrapperColOffset="8" WrapperColSpan="16">
+            <Button Type="@ButtonType.Primary" HtmlType="submit" Disabled=@Enable>
+                Submit
+            </Button>
+        </FormItem>
+    }
+</Form>
+@code {
+    // 在PrView页面中获取附件
+    private List<UploadFileItem> _defaultFileList = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        var attachments = await Http.GetFromJsonAsync<List<SysAttachment>>(
+    $"/api/Upload/GetAttachments?refCode={Pr.Code}&refType=PurchaseRequisition");
+            
+        _defaultFileList = attachments?.Select(a => new UploadFileItem
+        {
+            Id = a.Id.ToString(),
+            FileName = a.Name,
+            State = UploadState.Success,
+            Url = a.Path, // 下载链接
+            Response = a.Id.ToString() // 存储附件ID用于删除
+        }).ToList() ?? new List<UploadFileItem>();
+        // 加载历史附件
+        // _defaultFileList = await Http.GetFromJsonAsync<List<UploadFileItem>>(
+        //     $"/api/Upload/GetAttachments?refCode={Pr.Code}&refType=PurchaseRequisition");
+        // var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        // var user = authState.User;
+        // var userIdClaim = user.FindFirst("Account"); // 注意：这里使用Account，因为测试页面中用的是Account
+        // var account = userIdClaim?.Value;
+        // SqlClient SSC = new();
+        _currentUser = await UserContext.GetCurrentUserAsync();
+
+    }
+}
+
+<style>
+    /* 附件容器样式 */
+    .attachments-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    /* 文件网格布局 */
+    .files-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 8px;
+    }
+    
+    /* 文件卡片样式 */
+    .file-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100px;
+        padding: 8px;
+        border: 1px solid #e8e8e8;
+        border-radius: 4px;
+        background: #fafafa;
+        transition: all 0.3s;
+    }
+    
+    .file-card:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border-color: #1890ff;
+    }
+    
+    /* 文件图标容器 */
+    .file-icon-container {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+    }
+    
+    /* 文件图标 */
+    .file-icon {
+        font-size: 28px;
+        color: #1890ff;
+    }
+    
+    /* 文件名 */
+    .file-name {
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+        text-align: center;
+        margin-bottom: 4px;
+    }
+    
+    /* 下载链接 */
+    .download-link {
+        color: #666;
+        transition: color 0.3s;
+    }
+    
+    .download-link:hover {
+        color: #1890ff;
+    }
+    
+    /* 文件类型图标 - 根据扩展名显示不同图标 */
+    .file-pdf .file-icon { color: #e74c3c; }
+    .file-doc .file-icon { color: #2c78c5; }
+    .file-xls .file-icon { color: #27ae60; }
+    .file-img .file-icon { color: #e67e22; }
+</style>
+
+@code {
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+}
+<style>
+    /* 横向排列附件 */
+    .ant-upload-list {
+        display: flex;
+        flex-wrap: wrap;
+    }
+    
+    .ant-upload-list-item {
+        margin-right: 8px;
+        margin-bottom: 8px;
+        width: 100px;
+        height: 100px;
+    }
+    
+    /* 文件卡片样式 */
+    .file-card {
+        border: 1px solid #e8e8e8;
+        border-radius: 4px;
+        padding: 8px;
+        text-align: center;
+        background: #fafafa;
+    }
+    
+    /* 文件图标 */
+    .file-icon {
+        font-size: 24px;
+        margin-bottom: 8px;
+    }
+    
+    /* 文件名 */
+    .file-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+    }
+</style>
+
+@code
+{
+    [Parameter]
+    public string? Text { get; set; }
+
+    public int? Code;
+    Task<string> _oldTask;
+    string _selectedValue2;
+    bool _loading;
+
+    public PurchaseRequisition Pr = new("");
+    public List<PRInvInOut> IcInvTrxs;
+    public List<Company> Companies = Company.Select();
+    public List<Warehouse> Warehouses = Warehouse.Select();
+
+    string _selectedValue;
+    string selectedIcinvName;
+    string selectedIcCode;
+    string Dept;
+    string WareH;
+    string invName;
+    string CodeEdit;
+    int RowKey = 0;
+    int index = 0;
+    int count;
+    public bool Enable = true;
+    public bool IsVisible = false;
+    string SpeDesc = string.Empty;
+    string note = "请选择";
+    private User _currentUser;
+
+
+    ColumnAlign ColR = ColumnAlign.Right;
+
+    List<TrxGroup> TrxGrouplist;
+    List<Department> Departmentlist;
+    List<Warehouse> Warehouselist;
+    List<InventoryItem> Invs;
+    List<InventoryItem> IcInvlist2;
+    List<IcPrice> IcPricelist;
+    List<IcPrice> IcPriceInsertlist = [];
+
+
+    protected override void OnInitialized()
+    {
+        SqlClient SSC = new SqlClient();
+        TrxGrouplist = SSC.Db.Queryable<Models.TrxGroup>().ToList();
+        Departmentlist = SSC.Db.Queryable<Models.Department>().ToList();
+        Warehouselist = SSC.Db.Queryable<Models.Warehouse>().ToList();
+        Invs = SSC.Db.Queryable<InventoryItem>().ToList();
+        IcInvlist2 = SSC.Db.Queryable<InventoryItem>().ToList();
+        IcPricelist = SSC.Db.Queryable<Models.IcPrice>().ToList();
+        IcPriceInsertlist = [];
+
+        long? Code;
+        Code = long.Parse(Text);
+        Pr = SSC.Db.Queryable<PurchaseRequisition>()
+            .IncludesAllFirstLayer()
+            .IncludesAllSecondLayer(xc => xc.PRInvInOuts)
+            .IncludesAllSecondLayer(xc => xc.ApprovalType)
+            .IncludesAllSecondLayer(xc => xc.ApprovalProcess)
+            .Includes(Pr => Pr.ApprovalProcess, ap => ap.Steps, st => st.ApprovalProcess)
+            .Includes(Pr => Pr.ApprovalProcess, ap => ap.Steps, st => st.Approver)
+            .Includes(Pr => Pr.PRInvInOuts, io => io.InventoryItem, inv => inv.Specifications)
+            .Where(it => it.Id == Code).First();
+        Pr.ApprovalProcess?.Steps?.OrderBy(x => x.StepNumber).ToArray();
+        IcPriceInsertlist = [];
+
+        //var authState = AuthStateProvider.GetAuthenticationStateAsync();
+    }
+
+    private void OnRowClick(RowData<PRInvInOut> value)
+    {
+        RowKey = value.RowIndex;
+        index = value.RowIndex - 1;
+        Console.WriteLine($"search: {RowKey}");
+        Pr.UpdateAmount();
+    }
+
+    void PREdit()
+    {
+        for(int i = 0; i < Pr.PRInvInOuts.Count();i++)
+        {
+            Company company = new Company();
+            Warehouse warehouse = new Warehouse();
+            Pr.PRInvInOuts[i].Company ??= company;
+            Pr.PRInvInOuts[i].Warehouse ??= warehouse;
+        }
+        Enable = false;
+        IsVisible = true;
+    }
+
+    Dictionary<bool, string> checkResult;
+    void PRApprove()
+    {
+        checkResult = Pr.Approve(Comments: "审批通过");
+        Modal_Title = checkResult.Keys.FirstOrDefault() ? "审批成功" : "审批失败";
+        Mes = checkResult.Values.FirstOrDefault();
+        Modal_visible = true;
+    }
+
+    void PRCreatePO()
+    {
+        List<PurchaseOrder> purchaseOrders = Pr.ConvertToPurchaseOrders();
+
+        foreach(var it in purchaseOrders)
+        {
+            it.Insert();
+        }
+
+        //checkResult = Pr.Check(Comments: "审批通过");
+        Modal_Title = "保存";
+        Mes = "保存成功";
+        Modal_visible = true;
+    }
+    private void SpeChanged(PRInvInOut row, Specification value)
+    {
+        row.Specification = value;
+        string invCode = row.InventoryItem.Code;
+        if (value != null)
+        {
+            row.SKU = value.SKU;
+        }
+
+        if (Pr.PRInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+
+    // 添加新操作
+    public async Task ExportAction()
+    {
+        var url = $"/api/Export/PurchaseRequisition/{Pr.Id}";
+        var result = await Http.GetAsync(url);
+    
+        if (result.IsSuccessStatusCode)
+        {
+            ShowSuccessModal("导出成功", "采购单已成功导出");
+        }
+        else
+        {
+            ShowErrorModal("导出失败: " + await result.Content.ReadAsStringAsync());
+        }
+    }
+
+    private void CompanyChanged(PRInvInOut row, Company value)
+    {
+        row.Company = value;
+        row.CompanyCode = value.Code;
+    }
+
+    private void WarehouseChanged(PRInvInOut row, Warehouse value)
+    {
+        row.Warehouse = value;
+        row.WarehouseCode = value.Code;
+    }
+
+    private void AddItem(PRInvInOut row, MouseEventArgs args)
+    {
+        if (!string.IsNullOrWhiteSpace(SpeDesc))
+        {
+            int newId = row.InventoryItem.Specifications.Count() + 1;
+            row.InventoryItem.Specifications.Add(
+                new Specification("")
+                {
+                    Description = SpeDesc,
+                    InvCode = row.InventoryItem.Code,
+                    IsDefault = false,
+                    ConversionRatio = decimal.Zero
+                }
+            );
+            SpeDesc = string.Empty;
+        }
+    }
+
+    void IcTrxGroupChange(TrxGroup value)
+    {
+        Pr.PRTrxGroupCode = value?.Code;
+        Pr.InsertTime = DateTime.Now;
+        Pr.UpdateTime = DateTime.Now;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void WarehouseChange(Warehouse value)
+    {
+        //Pr.PRWarehouseCode = value?.Code;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void DeptChange(Department value)
+    {
+        Pr.DepartmentCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void InvChange(InventoryItem value)
+    {
+        //Ic.Department = value?.DepartmentDec;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    private void AmountChange()
+    {
+        Pr.Quantity = 0;
+        Pr.Amount = 0;
+        Pr.AmountIncTax = 0;
+        foreach (PRInvInOut invTrx in Pr.PRInvInOuts)
+        {
+            Pr.Quantity += invTrx.Quantity;
+            Pr.Amount += invTrx.Amount;
+            Pr.AmountIncTax += invTrx.AmountIncTax;
+        }
+
+        Console.WriteLine($"Price changed to: ");
+        Console.WriteLine($"Price changed to: ");
+    }
+    private PRInvInOut InvTrx = new PRInvInOut();
+    private decimal IcPriceByID(string Code)
+    {
+        decimal Price = 0M;
+        foreach (IcPrice IcPrice in IcPricelist.Where(x => x.InvCode == Code))
+        {
+            Price = IcPrice.Price;
+        }
+        return Price;
+    }
+
+    void addRow()
+    {
+        count = Pr.PRInvInOuts.Count;
+        Console.WriteLine($"Success:{JsonSerializer.Serialize("char")}");
+        Console.WriteLine(Pr.PRInvInOuts.Count().ToString());
+        Console.WriteLine(Pr.PRInvInOuts[0]);
+        Console.WriteLine(Pr.PRInvInOuts[0].InventoryItem.Name.ToString());
+    }
+
+    private List<InventoryItem> GetIcInvListByInvTrx(List<PRInvInOut> PRInvInOuts)
+    {
+        List<InventoryItem> icInvs = new List<InventoryItem>();
+        foreach (PRInvInOut invTrx in PRInvInOuts)
+        {
+            icInvs.Add(invTrx.InventoryItem);
+        }
+        return icInvs;
+    }
+    private void OnFinish(EditContext editContext)
+    {
+        Pr.Update();
+        IsVisible = false;
+
+        Console.WriteLine($"Update Success:{JsonSerializer.Serialize(Pr)}");
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}");
+
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        Console.WriteLine($"Failed:{JsonSerializer.Serialize(Pr.Code)}");
+    }
+
+    private async Task InvOnSearch(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (_oldTask == null || _oldTask.IsCompleted)
+            {
+                _loading = true;
+                StateHasChanged();
+            }
+        }
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void OnSelectedItemChangedHandler(InventoryItem value)
+    {
+        string id = value.Code;
+        CodeEdit = value.Code;
+
+        foreach (PRInvInOut invTrx in Pr.PRInvInOuts/* .Where(M => Code == 0) */)
+        {
+            //invTrx.InvTrxUpdateCode(Pr.Code);
+        }
+
+        foreach (PRInvInOut invTrx in Pr.PRInvInOuts.Where(xx => xx.InvCode == value.Code))
+        {
+            //invTrx.UpdatePrice(IcPriceByID(invTrx.InvCode));
+        }
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+
+    private async Task HandleUploadSuccess(UploadFileItem file)
+    {
+        Message.Success($"{file.FileName} 上传成功", 2);
+    }
+    
+    // 文件删除成功处理
+    private async Task HandleRemoveSuccess(string fileId)
+    {
+        Message.Success("附件删除成功", 2);
+    }
+}

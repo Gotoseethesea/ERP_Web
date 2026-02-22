@@ -1,0 +1,195 @@
+﻿@page "/inventory-report/inventory_flow"
+@page "/inventory-InventoryFlow"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject MessageService MessageService;
+@using AntDesign
+@using AntDesign.TableModels
+@using ERP_Web.Components.Custom
+@using ERP_Web.Models
+@using ERP_Web.Models.Report
+@using ERP_Web.Repository
+
+<PageHeader Title="出入库流水账" SubTitle="库存出入库明细查询"></PageHeader>
+
+<Card>
+    <FilterPanel @ref="filterPanel"
+                 Filters="@Filters"
+                 gutter="@gutter"
+                 OnSearch="Refresh">
+    </FilterPanel>
+</Card>
+
+<DynamicButtonGroup PageRoute="inventory_flow" OnButtonClick="HandleButtonClick" />
+
+@if (Data == null || Data.Count == 0)
+{
+    <Alert Type="AlertType.Info" Message="暂无数据" Style="margin-top: 16px" />
+}
+else
+{
+    <Table @ref="_table" TItem="InventoryFlowDto"
+           DataSource="Data"
+           ScrollX="1500"
+           StickyOffsetHeader="64"
+           Size="TableSize.Small"
+           PageSize="20"
+           Bordered>
+        <PropertyColumn Property="c => c.TransactionDate" Title="日期" Fixed="ColumnFixPlacement.Left" Width="120px" Format="yyyy-MM-dd" />
+        <PropertyColumn Property="c => c.WarehouseName" Title="仓库" Width="120px" />
+        <PropertyColumn Property="c => c.InvCode" Title="商品编码" Width="120px" />
+        <PropertyColumn Property="c => c.InvName" Title="商品名称" Width="200px" Ellipsis="true" />
+        <PropertyColumn Property="c => c.SpecDescription" Title="规格" Width="150px" />
+        <PropertyColumn Property="c => c.Unit" Title="单位" Width="80px" />
+        <Column TData="string" Title="出入库类型" Width="100px">
+            @switch (context.TrxType)
+            {
+                case 1:
+                    <Tag Color="TagColor.Green">入库</Tag>
+                    break;
+                case -1:
+                    <Tag Color="TagColor.Red">出库</Tag>
+                    break;
+                case 0:
+                    <Tag Color="TagColor.Blue">直入直出</Tag>
+                    break;
+                default:
+                    <Tag Color="TagColor.Error">未知</Tag>
+                    break;
+            }
+        </Column>
+        <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="120px" Format="0.####" />
+        <PropertyColumn Property="c => c.Price" Title="单价" Align="ColumnAlign.Right" Width="120px" Format="0.####" />
+        <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="120px" Format="0.##" />
+        <PropertyColumn Property="c => c.TransactionCode" Title="关联单据号" Width="150px" />
+        <PropertyColumn Property="c => c.Explanation" Title="备注" Ellipsis="true" />
+    </Table>
+}
+
+@code {
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24
+    };
+    private List<FilterPanel.FilterItem> Filters = new();
+    private FilterPanel filterPanel;
+    private Table<InventoryFlowDto> _table;
+    List<InventoryFlowDto> Data = new();
+    List<Warehouse> Warehouses = Warehouse.Select();
+    List<Category> Categories = Category.Select();
+
+    DateOnly selectStartDate = DateOnly.FromDateTime(DateTime.Now.AddDays(-30));
+    DateOnly selectEndDate = DateOnly.FromDateTime(DateTime.Now);
+    string? selectWarehouseCode;
+    string? selectCategoryCode;
+    string? searchInvName;
+    int? selectTrxType;
+
+    protected override void OnInitialized()
+    {
+        InitializeFilters();
+    }
+
+    private void InitializeFilters()
+    {
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "日期范围",
+            Type = FilterPanel.FilterType.DateRange,
+            //DefaultValue = $"{selectStartDate:yyyy-MM-dd},{selectEndDate:yyyy-MM-dd}"
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "仓库",
+            Type = FilterPanel.FilterType.Select,
+            Options = Warehouses.Select(d => new FilterPanel.OptionItem { Value = d.Code, Label = d.Name }).ToList()
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "商品分类",
+            Type = FilterPanel.FilterType.Select,
+            Options = Categories.Select(d => new FilterPanel.OptionItem { Value = d.Code, Label = d.Name }).ToList()
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "商品名称",
+            Type = FilterPanel.FilterType.Like,
+            Placeholder = "输入商品名称/编码搜索"
+        });
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "出入库类型",
+            Type = FilterPanel.FilterType.Select,
+            Options = new List<FilterPanel.OptionItem>
+            {
+                new() { Value = "1", Label = "入库" },
+                new() { Value = "-1", Label = "出库" }
+            }
+        });
+    }
+
+    private async Task Refresh()
+    {
+        try
+        {
+            // 解析筛选条件（完全对齐你现有收发存的取值方式）
+            var dateRange = Filters.First(x => x.Label == "日期范围").DateRange;
+            if (dateRange != null && dateRange.Length == 2)
+            {
+                selectStartDate = dateRange[0] ?? selectStartDate;
+                selectEndDate = dateRange[1] ?? selectEndDate;
+            }
+            selectWarehouseCode = Filters.First(x => x.Label == "仓库").SelectedValues?.FirstOrDefault()?.ToString();
+            selectCategoryCode = Filters.First(x => x.Label == "商品分类").SelectedValues?.FirstOrDefault()?.ToString();
+            searchInvName = Filters.First(x => x.Label == "商品名称").SelectedValues?.FirstOrDefault()?.ToString();
+            var trxTypeVal = Filters.First(x => x.Label == "出入库类型").SelectedValues?.FirstOrDefault()?.ToString();
+            selectTrxType = !string.IsNullOrEmpty(trxTypeVal) ? int.Parse(trxTypeVal) : null;
+
+            // 调用你已有的报表查询接口
+            Data = await Task.Run(() => InventoryReport.GetFlow(
+                startDate: selectStartDate,
+                endDate: selectEndDate,
+                warehouseCode: selectWarehouseCode,
+                categoryCode: selectCategoryCode,
+                invName: searchInvName,
+                trxType: selectTrxType
+            ));
+
+            MessageService.Success($"查询成功，共找到{Data.Count}条记录");
+        }
+        catch (Exception ex)
+        {
+            MessageService.Error($"查询失败：{ex.Message}");
+        }
+    }
+
+    private async Task HandleButtonClick(string actionName)
+    {
+        switch (actionName)
+        {
+            case "Refresh":
+                await Refresh();
+                break;
+            case "ExportExcel":
+                ExportExcel();
+                break;
+        }
+    }
+
+    private void ExportExcel()
+    {
+        // 直接复用你现有NPOI导出逻辑，传入Data即可
+        MessageService.Info("导出功能开发中");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.Delay(500);
+            await Refresh();
+        }
+    }
+}

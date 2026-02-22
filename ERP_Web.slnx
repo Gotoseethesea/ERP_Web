@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ERP.Shared/ERP.Shared.csproj" Id="024fc33c-08ed-4536-a5ac-37007942de50" />
+  <Project Path="ERP_Web.Client/ERP_Web.Client.csproj" />
+  <Project Path="ERP_Web/ERP_Web.csproj" />
+</Solution>

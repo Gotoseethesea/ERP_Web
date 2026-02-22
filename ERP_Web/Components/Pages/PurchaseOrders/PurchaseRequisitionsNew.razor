@@ -1,0 +1,917 @@
+﻿@page "/PrNew"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ConfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using ERP_Web.Components.Custom
+@using ERP_Web.Models
+@using M = ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+@using System.Text.Json;
+@using AntDesign.JsInterop
+@using System.Reflection.Metadata
+@using System.Text.RegularExpressions
+@inject IJSRuntime JS
+@inject MessageService Message
+
+<div class="center">
+    <h3 class="center">新增采购申请单</h3>
+</div>
+
+<style>
+    .center {
+        margin: auto;
+        width: 50%;
+        padding: 10px;
+    }
+</style>
+@code {
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+}
+<Form Model="@Pr"
+      OnFinish="OnFinish"
+      OnFinishFailed="OnFinishFailed"
+      LabelColSpan="0"
+      WrapperColSpan="20">
+    <GridRow Gutter=@gutter>
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="代码">
+                <Input Disabled @bind-Value="Pr.Code" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="单号">
+                <Input Disabled @bind-Value="Pr.TrxNo" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="日期">
+                <DatePicker @bind-Value="Pr.Date" Picker="@DatePickerType.Date" />
+            </FormItem>
+        </GridCol>
+
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="采购类型">
+                <Select TItem="M.PoTrxGroup"
+                        TItemValue="M.PoTrxGroup"
+                        DataSource="@PoGrouplist"
+                        @bind-Value="@Pr.PoTrxGroup"
+                        @bind-SelectedItem="@Pr.PoTrxGroup"
+                        LabelName="@nameof(M.PoTrxGroup.Name)"
+                        GroupName="@nameof(M.PoTrxGroup.Note)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Descending"
+                        OnSelectedItemChanged="PoTrxGroupChange"
+                        Style="width: 100%;">
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="部门">
+                <Select TItem="M.Department"
+                        TItemValue="M.Department"
+                        DataSource="@Depts"
+                        @bind-Value="@Pr.Department"
+                        @bind-SelectedItem="@Pr.Department"
+                        LabelName="@nameof(M.Department.Name)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        OnSelectedItemChanged="DeptChange">
+                </Select>
+            </FormItem>
+        </GridCol>
+
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="职员">
+                <Select TItem="M.Employee"
+                        TItemValue="M.Employee"
+                        DataSource="@Emps"
+                        @bind-Value="@Pr.Employee"
+                        @bind-SelectedItem="@Pr.Employee"
+                        LabelName="@nameof(M.Employee.Name)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        OnSelectedItemChanged="EmpChange">
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="6">
+            <FormItem Label="审批流程">
+                <Select TItem="M.ApprovalType"
+                        TItemValue="M.ApprovalType"
+                        DataSource="@AppTypes"
+                        @bind-Value="@Pr.ApprovalType"
+                        @bind-SelectedItem="@Pr.ApprovalType"
+                        LabelName="@nameof(M.ApprovalType.Decscription)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        OnSelectedItemChanged="AppTypeChange">
+                </Select>
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <GridRow Align="RowAlign.Middle">
+        <GridCol Span="14">
+            <FormItem Label="摘要">
+                <Input @bind-Value="Pr.Explanation" />
+            </FormItem>
+        </GridCol>
+        <GridCol Span="2">
+            <VoiceRecognition @ref="voiceRecognition"
+                Id="PrExplanation"
+                OnResultReceived="HandleRecognitionResultForExp"
+                OnError="HandleRecognitionError"
+                OnEnd="HandleRecognitionEnd"
+                ShowDebugInfo="false" /> <!-- 可选调试模式 -->
+        </GridCol>
+    </GridRow>
+
+    <GridRow Gutter=@gutter>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="数量">
+                <AntDesign.InputNumber Disabled Precision="2" @bind-Value="@context.Quantity" Width="120" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="金额">
+                <AntDesign.InputNumber Disabled Precision="2" @bind-Value="@context.Amount" Width="120" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="含税金额">
+                <AntDesign.InputNumber Disabled Precision="4" @bind-Value="@context.AmountIncTax" Width="120" />
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <GridRow Gutter=@gutter>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="附件">
+                <FileUpload 
+                    RefCode="@Pr.Code" 
+                    RefType="PurchaseRequisition"
+                    OnUploadSuccess="HandleUploadSuccess"
+                    OnRemoveSuccess="HandleRemoveSuccess"/>             
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+
+    @if (Pr.ApprovalType?.Nodes != null)
+        {
+            <GridRow>
+                <GridCol Class="gutter-row" Span="@(Pr.ApprovalType?.Nodes?.Count <= 3 ? 14 : 24)">
+                    <Steps StartIndex="0" Current="0" Class="site-navigation-steps">
+                        @foreach (var node in Pr.ApprovalType?.Nodes ?? Enumerable.Empty<ApprovalNode>())
+                        {
+                            <Step Title="@node.Role" 
+                                Description="@node.Approver?.Name"/>
+                        }
+                    </Steps>
+                </GridCol>
+            </GridRow>
+        }
+</Form>
+<style>
+  .site-navigation-steps {
+      flex-wrap: wrap;
+  }
+  .site-navigation-steps > .ant-steps-item {
+      flex-basis: 20% !important; /* 每行4个 */
+      margin-right: 0 !important;
+  }
+</style>
+
+<GridRow Align="RowAlign.Middle">
+    <GridCol Span="4">
+        <Select DataSource="@InvsBySp"
+                @bind-Value="InvName"
+                EnableSearch
+                EnableVirtualization=true
+                ValueName="@nameof(M.InventoryItem.Code)"
+                LabelName="@nameof(M.InventoryItem.Name)"
+                TItemValue="string"
+                TItem="M.InventoryItem"
+                Placeholder="@FinalRes"
+                ShowArrowIcon="true"
+                HideNotFoundContent="true"
+                SearchDebounceMilliseconds="350"
+                Loading="_loading"
+                OnSearch="@(async (value) => await InvOnSearch(value))"
+                OnSelectedItemChanged="OnSelectedItem">
+        </Select>
+    </GridCol>
+
+    <GridCol Span="2">
+        <VoiceRecognition @ref="voiceRecognition"
+            Id="uniqueId"
+            OnResultReceived="HandleRecognitionResult"
+            OnError="HandleRecognitionError"
+            OnEnd="HandleRecognitionEnd"
+            ShowDebugInfo="false" /> <!-- 可选调试模式 -->
+
+             <Tag Color="TagColor.Magenta">@FinalRes</Tag>
+    </GridCol>
+
+    <GridCol Span="2">
+        <Button OnClick="SpeechConfirmation">语音识别</Button>
+    </GridCol>
+
+    <GridCol Span="4">
+        <Button OnClick="addRow" Type="ButtonType.Primary" Size="ButtonSize.Default">
+            插入行
+        </Button>
+
+        <Button OnClick="Submit" Type="@ButtonType.Primary" Size="ButtonSize.Default" HtmlType="submit">
+            提交保存
+        </Button>
+    </GridCol>
+</GridRow>
+<p></p>
+
+@code {
+    // 组件引用
+    private VoiceRecognition? voiceRecognition;
+
+    // 处理识别结果
+    private Task HandleRecognitionResult(VoiceRecognition.RecognitionResult result)
+    {
+        // 获取最终识别文本
+        string finalText = result.FinalTranscript;
+
+        // 获取完整结构化结果
+        var fullResult = result.FullResult;
+        FinalRes = finalText;
+        InvName = null;
+        // 示例：更新表单字段
+        //yourFormField = finalText;
+        
+        StateHasChanged();  //触发父主键渲染，显示结果@voiceRecognition?.FinalResult
+        return Task.CompletedTask;
+    }
+
+    private Task HandleRecognitionResultForExp(VoiceRecognition.RecognitionResult result)
+    {
+        // 获取最终识别文本
+        Pr.Explanation = result.FinalTranscript;
+        
+        StateHasChanged();  //触发父主键渲染，显示结果@voiceRecognition?.FinalResult
+        return Task.CompletedTask;
+    }
+    
+    // 处理识别错误
+    private Task HandleRecognitionError(string errorMsg)
+    {
+        // 示例：显示错误提示
+        Console.WriteLine($"语音识别失败: {errorMsg}");
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+    
+    // 处理识别结束
+    private Task HandleRecognitionEnd()
+    {
+        // 示例：执行后续操作
+        Console.WriteLine("语音输入完成");
+        return Task.CompletedTask;
+    }
+
+
+        // 文件上传成功处理
+    private async Task HandleUploadSuccess(UploadFileItem file)
+    {
+        Message.Success($"{file.FileName} 上传成功", 2);
+    }
+    
+    // 文件删除成功处理
+    private async Task HandleRemoveSuccess(string fileId)
+    {
+        Message.Success("附件删除成功", 2);
+    }
+}
+
+<Modal Title="保存"
+       OnOk="@HandleOk"
+       OnCancel="@HandleCancel"
+       @bind-Visible="@Modal_visible">
+    <p>保存成功</p>
+</Modal>
+
+@if (Pr.PRInvInOuts == null)
+{ }
+else
+{
+    <GridRow>
+        <GridCol Span="24">
+            <Table DataSource="@Pr.PRInvInOuts" TItem="M.PRInvInOut" Context="row" Size="TableSize.Small"
+                   OnRowClick="@OnRowClick"
+                   Bordered
+                   Resizable
+                   HidePagination
+                   ScrollX="1500" StickyOffsetHeader="64">
+                <PropertyColumn Property="c => Pr.PRInvInOuts.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35"> </PropertyColumn>
+                <PropertyColumn Property="c => c.InvCode" Title="存货" Width="120" Fixed="ColumnFixPlacement.Left">
+                    <Input @bind-Value="row.InvCode" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.InventoryItem.Name" Title="存货名称" Width="200" Fixed="ColumnFixPlacement.Left">
+                    <InputGroup Compact Style="display: flex; 
+                                align-items: center; 
+                                justify-content: center; 
+                                height: 100%; 
+                                padding: 0 10px;
+                                cursor: pointer;">
+                        <Select DataSource="@Invs"
+                                @bind-SelectedItem="row.InventoryItem"
+                                @bind-Value="row.InventoryItem"
+                                EnableSearch
+                                EnableVirtualization=true
+                                LabelName="@nameof(M.InventoryItem.Name)"
+                                TItemValue="M.InventoryItem"
+                                TItem="M.InventoryItem"
+                                Placeholder="输入存货名称"
+                                ShowArrowIcon="true"
+                                HideSelected
+                                SearchDebounceMilliseconds="350"
+                                Key="@(row.InventoryItem?.Code ?? Guid.NewGuid().ToString())"
+                                Loading="_loading"
+                                OnSearch="@(async (value) => await InvOnSearch(value))"
+                                OnSelectedItemChanged="OnSelectedItemChangedHandler">
+                        </Select>
+                        <Icon Type="file-image" Theme="IconThemeType.Outline" 
+                            OnClick="() => { 
+                                if (!string.IsNullOrEmpty(row.InventoryItem?.Image)) {
+                                    ImageVisible = true; 
+                                    ImageUrl = row.InventoryItem.Image;}
+                            }" 
+                            Style="font-size: 20px; 
+                                display: flex; 
+                                align-items: center; 
+                                justify-content: center; 
+                                height: 100%; 
+                                padding: 0 10px;
+                                cursor: pointer;" />
+                    </InputGroup>
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Specification.Description" Title="规格" Width="200" Ellipsis>
+                    <Select DataSource="row.InventoryItem.Specifications"
+                            @bind-SelectedItem="row.Specification"
+                            @bind-Value="row.Specification"
+                            LabelName="@nameof(M.Specification.Description)"
+                            TItemValue="M.Specification"
+                            TItem="M.Specification"
+                            Placeholder="请选择规格"
+                            ShowArrowIcon="true"
+                            SearchDebounceMilliseconds="350"
+                            Loading="_loading"
+                            OnSelectedItemChanged="@(value => SpeChanged(row,value))">
+                        <DropdownRender Context="originNode">
+                            <div>
+                                @originNode
+                                <Divider Style="margin: 4px 0"></Divider>
+                                <div style="display: flex; flex-wrap: nowrap; padding: 8px">
+                                    <Input Style="flex: auto" @bind-Value="@SpeDesc" />
+                                    <a style="flex: none; padding: 8px; display: block; cursor: pointer" @onclick="@(value => AddItem(row, value))">
+                                        <Icon Type="@IconType.Outline.Plus" />
+                                        Add Item
+                                    </a>
+                                </div>
+                            </div>
+                        </DropdownRender>
+                    </Select>
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Specification.Unit" Title="单位" Width="150" Ellipsis>
+                    @if (row.InventoryItem.Name != null && row.InventoryItem.Name != string.Empty && (row.Specification.Unit == null || row.Specification.Unit == string.Empty))
+                    {
+                        <Input @bind-Value="@row.Specification.Unit">
+                    }
+                    else
+                    {
+                        <a>@row.Specification.Unit</a>
+                    }
+                    </PropertyColumn>
+                <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.Quantity" Precision="2" Min="0" Bordered="false" @bind-Value:after="() => row.QuantityChange()" Width="140px" Style="text-align: right" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Price" Title="单价" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.Price" Bordered="false" Precision="4" Min="0" AutoSize=1 @bind-Value:after="() => row.PriceChange()" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.Amount" Precision="4" Bordered="false" @bind-Value:after="() => row.AmountChange()" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.TaxRate" Title="税率" Align="ColumnAlign.Right" Width="80">
+                    <AntDesign.InputNumber Step=0.01M Min="0" Max="1" @bind-Value="row.TaxRate" Bordered="false" @bind-Value:after="() => row.PriceIncTaxChange()" Width="70" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.PriceIncTax" Title="含税单价" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="row.PriceIncTax" Precision="4" Bordered="false" @bind-Value:after="() => row.PriceIncTaxChange()" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Align="ColumnAlign.Right" Width="200">
+                    <AntDesign.InputNumber @bind-Value="row.AmountIncTax" Precision="4" Bordered="false" @bind-Value:after="() => row.AmountIncTaxChange()" Width="190px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Note" Title="备注" Align="ColumnAlign.Center" Ellipsis>
+                    <AntDesign.Input @bind-Value="row.Note" Bordered="false" />
+                </PropertyColumn>
+            </Table>
+        </GridCol>
+    </GridRow>
+    }
+<Image Width="200" Height="200"
+       Style=" display: none;"
+       Src="@ImageUrl"
+       PreviewSrc="@ImageUrl"
+       @bind-PreviewVisible="ImageVisible" />
+@code {
+    bool ImageVisible = false;
+    string ImageUrl;
+
+    // C# 代码部分
+    private RenderFragment GetPrefixIcon(PRInvInOut row) => builder =>
+    {
+        // 仅当存在图片时才显示图标
+        if (!string.IsNullOrEmpty(row.InventoryItem?.Image))
+        {
+            builder.OpenComponent<Icon>(0);
+            builder.AddAttribute(1, "Type", "file-image");
+            builder.AddAttribute(2, "Theme", "outline");
+            builder.AddAttribute(3, "Style", "cursor: pointer; margin-right: 8px;");
+            builder.AddAttribute(4, "OnClick", EventCallback.Factory.Create(this, () =>
+            {
+                ImageVisible = true;
+                ImageUrl = row.InventoryItem?.Image;
+            }));
+            builder.CloseComponent();
+        }
+    };
+
+}
+
+@code {
+    bool Modal_visible = false;
+    M.IcInv? icInv;
+    M.InventoryItem? Inv;
+    List<M.InventoryItem>? Invs;
+    List<M.Specification>? Spes;
+    List<M.InventoryItem>? InvsBySp;
+    List<M.IcInv>? IcInvlist2;
+    string? InvName;
+    IEnumerable<string>? InvNames;
+    string TrxGroup;
+    string Dept;
+    string Emp;
+    string WareH;
+    string InvCodeEdit;
+    M.TrxGroup _selectedItem;
+    int RowKey = 0;
+    int index = 0;
+    int i = 0;
+    List<M.PoTrxGroup> PoGrouplist;
+    List<M.Department> Depts;
+    List<M.Warehouse> Wares;
+    List<M.Employee> Emps;
+    List<M.ApprovalType> AppTypes;
+    List<M.IcPrice> IcPricelist;
+    List<M.IcPrice> IcPriceInsertlist;
+    M.InvTrx InvTrxRowSelected;
+
+    public M.PurchaseRequisition Pr = new M.PurchaseRequisition("")
+    {
+        Date = DateOnly.FromDateTime(DateTime.Now),
+        ApprovalType = new ApprovalType("") { Nodes = new() },
+        PRInvInOuts = new List<M.PRInvInOut>() { new PRInvInOut() { Specification = new M.Specification("") } }
+    };
+
+    public void PrOnInitialized()
+    {
+        Pr = new M.PurchaseRequisition("")
+        {
+            Date = DateOnly.FromDateTime(DateTime.Now),
+            PRInvInOuts = new List<M.PRInvInOut>() { new PRInvInOut() { Specification = new M.Specification("") } }
+        };
+        for (int i = 1; i <= 2; i++)
+        {
+            Pr.PRInvInOuts.Add(new M.PRInvInOut()
+            {
+                InventoryItem = new M.InventoryItem("")
+                {
+                    Specifications = new List<Specification>() {
+                        new M.Specification("") }
+                },
+                Specification = new M.Specification("")
+            });
+
+            Pr.PRInvInOuts.Add(new M.PRInvInOut()
+            {
+                InventoryItem = new M.InventoryItem(""),
+                Specification = new M.Specification("")
+            });
+        }
+        Pr.GetTrxNo<PurchaseRequisition>("PR");
+        Pr.GetCode("PR");
+    }
+
+
+    protected override void OnInitialized()
+    {
+        SqlClient SSC = new SqlClient();
+        // TrxGrouplist = SSC.Db.Queryable<M.TrxGroup>().ToList();
+        PoGrouplist = SSC.Db.Queryable<M.PoTrxGroup>().ToList();
+        Depts = SSC.Db.Queryable<Models.Department>().ToList();
+        Wares = SSC.Db.Queryable<Models.Warehouse>().ToList();
+        Invs = SSC.Db.Queryable<Models.InventoryItem>().IncludesAllFirstLayer().ToList();
+        IcPricelist = SSC.Db.Queryable<Models.IcPrice>().ToList();
+        Emps = SSC.Db.Queryable<Models.Employee>().ToList();
+        AppTypes = SSC.Db.Queryable<Models.ApprovalType>().Includes(x => x.Nodes, y => y.Approver).ToList();
+
+        PrOnInitialized();
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr)}");
+    }
+
+
+    public void SpeechConfirmation()
+    {
+        if (Pr.PRInvInOuts[index].InvCode is not null && RowKey < Pr.PRInvInOuts.Count())
+        {
+            index++;
+            RowKey = index + 1;
+            Console.WriteLine("indes:" + index.ToString() + "RowKeys:" + RowKey.ToString());
+            Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr.PRInvInOuts[index])}");
+        }
+        Console.WriteLine("indes:" + index.ToString() + "RowKeys:" + RowKey.ToString());
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr.PRInvInOuts[index])}");
+
+        if (FinalRes is not null)
+        {
+            Inv = Invs.Find(x => x.Name.Contains(FinalRes));
+            InvsBySp = Invs.Where(x => x.Name.Contains(FinalRes)).ToList();
+            if (InvsBySp == null || InvsBySp.Count() == 0) return;
+            var Spe = Inv.Specifications.OrderByDescending(x1 => x1.IsDefault).FirstOrDefault();
+
+            if (Inv is not null)
+            {
+                Pr.PRInvInOuts[index].InventoryItem = Inv;
+                Pr.PRInvInOuts[index].InvCode = Inv.Code;
+                Pr.PRInvInOuts[index].Specification = Spe;
+            }
+            if (RowKey < Pr.PRInvInOuts.Count())
+            {
+                RowKey = RowKey + 1;
+                index = index + 1;
+            }
+            Console.WriteLine("indes:" + index.ToString() + "RowKeys:" + RowKey.ToString());
+            Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr.PRInvInOuts[index])}");
+            StateHasChanged();
+        }
+    }
+    private void OnSelectedItem(M.InventoryItem value)
+    {
+        if (value != null)
+        {
+            Inv = value;
+            if (Pr.PRInvInOuts[index].InvCode is null)
+            {
+                index--;
+                RowKey = index - 1;
+            }
+            var spe = Inv.Specifications.Find(x1 => x1.IsDefault == true);
+
+            InvCodeEdit = value.Code;
+            Pr.PRInvInOuts[index].InventoryItem = value;
+            Pr.PRInvInOuts[index].InvCode = value.Code;
+            Pr.PRInvInOuts[index].Specification = spe;
+        }
+
+    }
+
+    public class ApiResult
+    {
+        public List<string[]> result { get; set; }
+    }
+
+    private void OnSelectedItemChangedHandler(M.InventoryItem value)
+    {
+        //SqlClient SSC = new SqlClient();
+        //M.InventoryBalance inventoryBalance = SSC.Db.Queryable<M.InventoryBalance>().Where(xyz => xyz.InvCode == value.Code).First();
+
+
+        value.Specifications = M.Specification.Select(value.Code);
+        if (value.Specifications == null || !value.Specifications.Any())
+        {
+            // 处理 Specifications 为 null 或空集合的情况
+            Console.WriteLine("Specifications 未找到");
+            return;
+        }
+        Pr.PRInvInOuts[index].Specification = value.Specifications.OrderByDescending(x1 => x1.IsDefault).First();
+        Pr.PRInvInOuts[index].InventoryItem = value;
+        Pr.PRInvInOuts[index].InvCode = value.Code;
+        ImageUrl = value.Image;
+
+        if (Pr.PRInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+
+    private void SpeChanged(M.PRInvInOut row, M.Specification value)
+    {
+        row.Specification = value;
+        string invCode = row.InventoryItem.Code;
+        if (value != null)
+        {
+            row.SKU = value.SKU;
+        }
+
+        if (Pr.PRInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+    private void OnSearch(string value)
+    {
+        Console.WriteLine($"search: {value}");
+    }
+
+    private void OnRowClick(RowData<M.PRInvInOut> value)
+    {
+        RowKey = value.RowIndex;
+        index = value.RowIndex - 1;
+        Console.WriteLine($"search: {RowKey}");
+        Pr.UpdateAmount();
+    }
+
+    void PoTrxGroupChange(M.PoTrxGroup value)
+    {
+        // _selectedItem = value;
+        Pr.PRTrxGroupCode = value?.Code;
+        // Pr.TrxGroup = value;
+        // Pr.TrxType = value.TrxType;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void WarehouseChange(M.Warehouse value)
+    {
+        // Pr.WarehouseCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void DeptChange(M.Department value)
+    {
+        Pr.DepartmentCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+
+    void EmpChange(M.Employee value)
+    {
+        Pr.EmployeeCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    int AppTypeCount = 0;
+    int AppTypeCount2 = 0;
+    int AppTypeCount3 = 0;
+
+    void AppTypeChange(M.ApprovalType value)
+    {
+        Pr.ApprovalTypeCode = value?.Code;
+        if (value.Nodes.Count() >= 8)
+        {
+            AppTypeCount = 24;
+            AppTypeCount2 = 24;
+            AppTypeCount3 = value.Nodes.Count() * 6 - 48;
+        }
+        else if (value.Nodes.Count()>= 4)
+        {
+            AppTypeCount = 24;
+            AppTypeCount2 = value.Nodes.Count() * 6 - 48;
+
+        }else
+        {
+            AppTypeCount = value.Nodes.Count() * 4;
+        }
+        //AppTypeCount = value.Nodes.Count();
+        Console.WriteLine($"selected: ${value?.Decscription}");
+    }
+
+    void InvChange(M.IcInv value)
+    {
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+
+    void QuantityChange(M.PRInvInOut invTrx)
+    {
+        invTrx.QuantityChange();
+        // Pr.UpdateAmount();
+    }
+    void PriceChange(M.PRInvInOut invTrx)
+    {
+        invTrx.PriceChange();
+        // invTrx.PriceChange();
+        // Pr.UpdateAmount();
+    }
+
+    private void PriceIncTaxChange(M.PRInvInOut invTrx)
+    {
+        invTrx.PriceIncTaxChange();
+    }
+
+    private void AmountChange(M.PRInvInOut invTrx)
+    {
+        invTrx.AmountChange();
+    }
+
+    private void AmountIncTaxChange(M.PRInvInOut invTrx)
+    {
+        invTrx.AmountIncTaxChange();
+
+        // invTrx.AmountInTaxChange();
+        // Ic.UpdateAmount();
+    }
+
+    private decimal IcPriceByInvCode(string Code)
+    {
+        decimal Price = 0M;
+
+        foreach (M.IcPrice IcPrice in IcPricelist.Where(x => x.InvCode == Code))
+        {
+            Price = IcPrice.Price;
+        }
+        return Price;
+    }
+
+    public void addRow()
+    {
+        for (int i = 1; i <= 5; i++)
+        {
+            Pr.PRInvInOuts.Add(new M.PRInvInOut()
+            {
+                InventoryItem = new M.InventoryItem() { Specifications = new List<Specification>() { new M.Specification("") } },
+                Specification = new M.Specification("")
+            });
+        }
+        Console.WriteLine($"Success:{JsonSerializer.Serialize("char")}");
+    }
+
+    private void Submit()
+    {
+        Pr.PRInvInOuts.RemoveAll(item => item.InvCode == null);
+        SqlClient SSC = new SqlClient();
+
+        Pr.UpdateInvPrice();
+        int res;
+        bool res2;
+        Pr.GetTrxNo<PurchaseRequisition>("PR");//更新单号，简单防止串单
+        res2 = SSC.Db.InsertNav(Pr)
+            .Include(z1 => z1.PRInvInOuts).ThenInclude(z2 => z2.Specification)
+            .ExecuteCommand();
+        // M.InventoryBalance.UpdateBalance(Pr);
+        res = SSC.Db.Insertable(IcPriceInsertlist).ExecuteCommand();
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr)}");
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}");
+        Modal_visible = true;
+        PrOnInitialized();
+    }
+
+    private void HandleOk()
+    {
+        Pr.PRInvInOuts = new List<M.PRInvInOut>();
+    }
+
+    private void HandleCancel()
+    {
+        Modal_visible = false;
+    }
+
+    private void OnFinish(EditContext editContext)
+    {
+        Pr.Amount = 0;
+        foreach (M.PRInvInOut invTrx in Pr.PRInvInOuts)
+        {
+
+            // Pr.Amount += invTrx.Amount;
+            // Pr.AmountIncTax += invTrx.AmountIncTax;
+            // Pr.Quantity += invTrx.Quantity;
+            // M.IcPrice icPrice = new M.IcPrice { InvCode = invTrx.InvCode, Quantity = invTrx.Quantity, Price = invTrx.Price, Amount = invTrx.Amount };
+            // IcPriceInsertlist.Add(icPrice);
+        }
+        if (Pr.PRInvInOuts.Count() > 0)
+        {
+            // SqlClient SSC = new SqlClient();
+            // SSC.Db.InsertNav(Pr)
+            // .Include(z1 => z1.PRInvInOuts)
+            // .ExecuteCommand();
+            // int res;
+            // res = SSC.Db.Insertable(IcPriceInsertlist).ExecuteCommand();
+            Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr)}");
+            Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}");
+        }
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        Console.WriteLine($"Failed:{JsonSerializer.Serialize(Pr.Code)}");
+    }
+
+    Task<string> _oldTask;
+    bool _loading;
+
+    private async Task InvOnSearch(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (_oldTask == null || _oldTask.IsCompleted)
+            {
+                _loading = true;
+                StateHasChanged();
+            }
+        }
+        _loading = false;
+        StateHasChanged();
+    }
+
+    public string? FinalRes { get; set; }
+    public string? AllRes { get; set; }
+    public EventCallback<ChangeEventArgs> FinalResChanged { get; set; }
+
+    private void OnFinalResValueChanged(ChangeEventArgs e)
+    {
+        FinalRes = e.Value?.ToString();
+        InvName = null;
+    }
+
+    private void OnAllResValueChanged(ChangeEventArgs e)
+    {
+        AllRes = e.Value?.ToString();
+    }
+
+    private async Task SpeechReturn()
+    {
+        AllRes = new(await JS.InvokeAsync<string>("SpeechAllReturn"));
+        FinalRes = new(await JS.InvokeAsync<string>("SpeechFinalReturn"));
+        FinalRes = Regex.Replace(FinalRes, @"[\p{P}-[.]]", string.Empty);
+
+        Console.WriteLine($"结果: {FinalRes}");
+    }
+
+    void GetRes()
+    {
+        SpeechReturn().Wait();
+        speechToString(AllRes);
+    }
+
+    List<string> speechToString(string value)
+    {
+        List<string> res = new List<string>();
+        var json = JsonDocument.Parse(value).RootElement;
+        var json2 = json.GetProperty("paragraphs");
+
+        foreach (JsonElement je in json2.EnumerateArray())
+        {
+            var sentences = je.GetProperty("sentences")[1];
+            var finalTranscript = sentences.GetProperty("finalTranscript");
+            Console.WriteLine($"结果: {finalTranscript.GetString()}");
+            if (finalTranscript.GetString() is not null)
+                res.Add(finalTranscript.GetString());
+        }
+        return res;
+    }
+
+    private async Task Speechtest()
+    {
+        string result = "";
+        result = FinalRes;
+        var result2 = AllRes;
+    }
+}
+
+@code {
+    List<M.Specification> _list;
+    int? _selectedValue;
+    M.Specification _selectedItem2;
+    string SpeDesc = string.Empty;
+    private void AddItem(M.PRInvInOut row, MouseEventArgs args)
+    {
+        if (!string.IsNullOrWhiteSpace(SpeDesc))
+        {
+            int newId = row.InventoryItem.Specifications.Count() + 1;
+            row.InventoryItem.Specifications.Add(
+                new M.Specification("")
+                {
+                    Description = SpeDesc,
+                    InvCode = row.InventoryItem.Code,
+                    IsDefault = false,
+                    ConversionRatio = decimal.Zero
+                }
+            );
+            SpeDesc = string.Empty;
+        }
+    }
+}

@@ -1,0 +1,508 @@
+﻿<!-- 在Login.razor顶部加这个，关闭预渲染，避免初始化时HttpContext为null -->
+@attribute [StreamRendering(false)]
+@layout EmptyLayout
+@using Components.Layout
+
+@page "/logintemp"
+@using ERP_Web.Core.Abstractions
+@using ERP_Web.Core.Login
+@using ERP_Web.Models.PrivilegeHub
+@using Microsoft.AspNetCore.Components.Server
+@using System.Net.Http;
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Net
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject AuthenticationService AuthService
+@inject HttpClient Http
+@inject IJSRuntime JsRuntime
+@inject IHttpClientFactory _httpClientFactory
+@inject CookieEnabledClientFactory CookieClientFactory
+
+<AntDesign.Row Justify="RowJustify.Center" Align="RowAlign.Middle" Style="height:60vh; background-color:#f0f2f5;">
+    <AntDesign.Col Span="8">
+        <AntDesign.Card Title="系统登录" Style="width:100%;">
+            <!-- 修复1：使用NotAuthorized块显示登录表单 -->
+            <AuthorizeView Context="authContext">
+                <NotAuthorized>
+                    <AntDesign.Form Model="userLogin" OnFinish="HandleLogin">
+                        <AntDesign.FormItem Label="用户名" Required>
+                            <AntDesign.Input @bind-Value="userLogin.Name"  Placeholder="请输入用户名" />
+                        </AntDesign.FormItem>
+                        <AntDesign.FormItem Label="密码" Required>
+                            <AntDesign.InputPassword @bind-Value="userLogin.Password" Placeholder="请输入密码" />
+                        </AntDesign.FormItem>
+                        <AntDesign.FormItem>
+                            <AntDesign.Button Type="ButtonType.Primary" HtmlType="submit" Block>登录</AntDesign.Button>
+                        </AntDesign.FormItem>
+                    </AntDesign.Form>
+                </NotAuthorized>
+                <Authorized>
+                    <!-- 已登录用户看到的内容 -->
+                    <p>您已登录，用户名为：@authContext.User.Identity?.Name</p>
+                    <AntDesign.Button Type="ButtonType.Primary" OnClick="GoToHome">进入系统</AntDesign.Button>
+                    <AntDesign.Button Type="ButtonType.Primary" OnClick="LoginOut">退出登录</AntDesign.Button>
+
+                </Authorized>
+            </AuthorizeView>
+        </AntDesign.Card>
+    </AntDesign.Col>
+</AntDesign.Row>
+
+<Modal Title="操作"
+       OnOk="@HandleOk"
+       OnCancel="@HandleCancel"
+       @bind-Visible="@Modal_visible">
+    <p>@Mes</p>
+</Modal>
+
+
+@* <AuthorizeView>
+    <Authorized>
+        <!-- 已登录用户能看到 -->
+        <p>欢迎你，@context.User.Identity?.Name</p>
+    </Authorized>
+    <NotAuthorized>
+        <!-- 未登录用户看到 -->
+        <p>请先登录 @context.User.Identity?.Name </p>
+    </NotAuthorized>
+</AuthorizeView> *@
+
+
+@code{
+    private bool Modal_visible = false;
+    private string Mes = "操作成功";
+    private void HandleOk()
+    {
+    }
+
+    private void HandleCancel()
+    {
+        Modal_visible = false;
+    }
+
+    private void OnFinish(EditContext editContext)
+    {
+        
+    }
+}
+
+@code {
+    private User userLogin = new User();
+
+    // 在组件初始化时订阅事件
+    //ServerAuthenticationStateProvider serverAuth;
+    protected override void OnInitialized()
+    {
+        if (AuthStateProvider is ServerAuthenticationStateProvider s)
+        {
+            s.AuthenticationStateChanged += HandleAuthStateChanged;
+        }
+    }
+
+    private void HandleAuthStateChanged(Task<AuthenticationState> authState)
+    {
+        // 处理状态变更逻辑（如更新UI）
+        StateHasChanged(); // 通知组件重新渲染
+    }
+
+    // 组件销毁时取消订阅
+    public void Dispose()
+    {
+        if (AuthStateProvider is ServerAuthenticationStateProvider s)
+        {
+            s.AuthenticationStateChanged -= HandleAuthStateChanged;
+        }
+    }
+    private void GoToHome() => NavigationManager.NavigateTo("/");
+
+    private async Task HandleLogin()
+    {
+        if (!string.IsNullOrEmpty(userLogin.Name) && !string.IsNullOrEmpty(userLogin.Password))
+        {
+            try
+            {
+                var (httpClient, cookieContainer) = CookieClientFactory.CreateCookieEnabledClient("CookieEnabledClient");
+
+                var form = new Dictionary<string, string>
+                {
+                    ["name"] = userLogin.Name ?? string.Empty,
+                    ["password"] = userLogin.Password ?? string.Empty
+                };
+                var content = new FormUrlEncodedContent(form);
+
+                // 👇 关键1：用当前页面访问地址构造请求地址，自动适配IP/localhost
+                var currentBaseUri = new Uri(NavigationManager.BaseUri);
+                var resp = await httpClient.PostAsync(new Uri(currentBaseUri, "/loginApi"), content);
+
+                if (resp.IsSuccessStatusCode)
+                {
+                    if (cookieContainer == null) return;
+
+                    // 👇 关键2：动态获取当前访问域名，不再写死localhost
+                    var currentUri = new Uri(NavigationManager.Uri);
+                    var cookieCollection = cookieContainer.GetCookies(currentUri);
+
+                    var cookiesToSync = new List<object>();
+                    foreach (Cookie cookie in cookieCollection)
+                    {
+                        cookiesToSync.Add(new
+                        {
+                            name = cookie.Name,
+                            value = cookie.Value,
+                            expires = cookie.Expires != DateTime.MinValue ? cookie.Expires : (DateTime?)null,
+                            path = cookie.Path,
+                            // 👇 关键3：Cookie的Domain强制设为当前访问的域名，适配IP
+                            domain = currentUri.Host,
+                            secure = currentUri.Scheme == "https",
+                            sameSite = "Lax"
+                        });
+                    }
+
+                    if (cookiesToSync.Count > 0)
+                    {
+                        await JsRuntime.InvokeVoidAsync("setCookies", cookiesToSync);
+                    }
+
+                    NavigationManager.NavigateTo("/", forceLoad: true);
+                }
+                else if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    Mes = "登录失败：用户名或密码错误";
+                    Modal_visible = true;
+                }
+                else
+                {
+                    Mes = $"登录失败：{resp.StatusCode}";
+                    Modal_visible = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                // 捕获所有异常，避免Circuit断开
+                Mes = $"登录异常：{ex.Message}";
+                Modal_visible = true;
+            }
+        }
+    }
+    private async Task LoginOut()
+    {
+        try
+        {
+            var (httpClient, cookieContainer) = CookieClientFactory.CreateCookieEnabledClient("CookieEnabledClient");
+            var currentBaseUri = new Uri(NavigationManager.BaseUri);
+            var resp = await httpClient.PostAsync(new Uri(currentBaseUri, "api/Account/logout"), null);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                // 删除Cookie时用当前域名
+                await JsRuntime.InvokeVoidAsync("deleteCookie", "ERP.Auth", new { domain = new Uri(NavigationManager.Uri).Host });
+                NavigationManager.NavigateTo("/", forceLoad: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Mes = $"登出异常：{ex.Message}";
+            Modal_visible = true;
+        }
+    }
+
+    private async Task HandleLogin2()
+    {
+        // 发送登录请求
+        //var resp = await Http.PostAsync("/api/Account/Login", content);
+        var (httpClient, cookieContainer) = CookieClientFactory.CreateCookieEnabledClient("CookieEnabledClient");
+
+        if (!string.IsNullOrEmpty(userLogin.Name) &&
+            !string.IsNullOrEmpty(userLogin.Password))
+        {
+            // 使用工厂创建客户端和 CookieContainer
+            var user = User.Login(userLogin.Name, userLogin.Password);
+
+            // 将登录请求转为普通 HTTP POST，以便在可写的 HTTP 响应上下文中写入 cookie
+            var form = new Dictionary<string, string>
+            {
+                ["name"] = userLogin.Name ?? string.Empty,
+                ["password"] = userLogin.Password ?? string.Empty
+            };
+
+            var content = new FormUrlEncodedContent(form);
+            // 发送登录请求
+            var resp = await httpClient.PostAsync("/loginApi", content);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                //var (httpClient, handler) = CookieClientFactory.CreateCookieEnabledClient("CookieEnabledClient");
+
+
+                // 2. 获取关联的 CookieContainer
+                if (cookieContainer == null) return;
+
+                // 3. 获取所有 Cookie
+
+                var uri = new Uri("https://localhost:9000/login");
+                var cookieCollection = cookieContainer.GetCookies(uri);
+
+                // 4. 转换为 JS 可序列化对象
+                var cookiesToSync = new List<object>();
+                foreach (Cookie cookie in cookieCollection)
+                {
+                    cookiesToSync.Add(new
+                    {
+                        name = cookie.Name,
+                        value = cookie.Value,
+                        expires = cookie.Expires != DateTime.MinValue ? cookie.Expires : (DateTime?)null,
+                        path = cookie.Path,
+                        domain = cookie.Domain,
+                        secure = cookie.Secure,
+                        //sameSite = cookie.SameSite.ToString() // None/Lax/Strict
+                        sameSite = "Lax"
+                    });
+                }
+
+                // 5. 调用 JS 写入浏览器
+                if (cookiesToSync.Count > 0)
+                {
+                    await JsRuntime.InvokeVoidAsync("setCookies", cookiesToSync);
+                    Console.WriteLine($"已同步 {cookiesToSync.Count} 个 Cookie 到浏览器");
+                }
+
+                // 同步 Cookie 到浏览器
+                //await SyncCookiesToBrowser();
+
+                // 刷新页面
+                NavigationManager.NavigateTo("/", forceLoad: true);
+
+                // 关键：通知认证状态变更
+                if (AuthStateProvider is ServerAuthenticationStateProvider serverAuth)
+                {
+                    await serverAuth.GetAuthenticationStateAsync();
+                }
+                // UserContext.CurrentUser = user;
+                // 登录成功：强制页面刷新以使用新的身份验证 cookie
+                //NavigationManager.NavigateTo("/icadd", forceLoad: true);
+            }
+            else if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                Mes = "登录失败：用户名或密码错误";
+                Modal_visible = true;
+            }
+            else
+            {
+                Mes = "登录失败：服务器错误";
+                Modal_visible = true;
+            }
+        }
+
+    }
+
+    private async Task LoginOut2()
+    {
+        var (httpClient, cookieContainer) = CookieClientFactory.CreateCookieEnabledClient("CookieEnabledClient");
+
+        // 发送登出请求
+        var resp = await httpClient.PostAsync("api/Account/logout", null);
+
+        if (resp.IsSuccessStatusCode)
+        {
+            // 清除浏览器中的 Cookie
+            await JsRuntime.InvokeVoidAsync("deleteCookie", "ERP.Auth");
+
+            // 刷新页面
+            NavigationManager.NavigateTo("/", forceLoad: true);
+
+            // 关键：通知认证状态变更
+            if (AuthStateProvider is ServerAuthenticationStateProvider serverAuth)
+            {
+                await serverAuth.GetAuthenticationStateAsync();
+            }
+        }
+    }
+
+}
+
+<script>
+    // 设置单个 Cookie
+    window.setCookie = function(name, value, options = {}) {
+        const {
+            expires,
+            path = '/',
+            domain = window.location.hostname,
+            secure = true,
+            sameSite = 'Lax'
+        } = options;
+        
+        let cookieStr = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+        
+        if (expires) cookieStr += `; expires=${expires.toUTCString()}`;
+        if (path) cookieStr += `; path=${path}`;
+        if (domain) cookieStr += `; domain=${domain}`;
+        if (secure) cookieStr += '; Secure';
+        if (sameSite) cookieStr += `; SameSite=${sameSite}`;
+        
+        document.cookie = cookieStr;
+        return true;
+    };
+
+    // 批量设置 Cookies
+    window.setCookies = function(cookies) {
+        cookies.forEach(cookie => {
+            window.setCookie(
+                cookie.name,
+                cookie.value,
+                {
+                    expires: cookie.expires ? new Date(cookie.expires) : null,
+                    path: cookie.path,
+                    domain: cookie.domain,
+                    secure: cookie.secure,
+                    sameSite: cookie.sameSite
+                }
+            );
+        });
+        return cookies.length;
+    };
+    // 增强版 setCookie 函数
+    window.setCookieStr = function(cookie) {
+        let cookieStr = `${encodeURIComponent(cookie.name)}=${encodeURIComponent(cookie.value)}`;
+        
+        if (cookie.expires) {
+            cookieStr += `; expires=${new Date(cookie.expires).toUTCString()}`;
+        }
+        if (cookie.path) {
+            cookieStr += `; path=${cookie.path}`;
+        }
+        if (cookie.domain) {
+            cookieStr += `; domain=${cookie.domain}`;
+        }
+        if (cookie.secure) {
+            cookieStr += '; Secure';
+        }
+        if (cookie.sameSite) {
+            cookieStr += `; SameSite=${cookie.sameSite}`;
+        }
+        
+        document.cookie = cookieStr;
+        return true;
+    };
+    window.deleteCookie = function(name, options = {}) {
+        const {
+            path = '/',
+            domain = window.location.hostname
+        } = options;
+    
+        // 构建 Cookie 删除字符串
+        let cookieStr = `${encodeURIComponent(name)}=`;
+    
+        // 设置过期时间为过去（1970年1月1日）
+        cookieStr += '; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    
+        // 添加路径和域信息
+        if (path) cookieStr += `; path=${path}`;
+        if (domain) cookieStr += `; domain=${domain}`;
+    
+        // 尝试设置 Cookie
+        try {
+            document.cookie = cookieStr;
+            console.error(`删除 Cookie "${name}" 成功:`, cookieStr);
+
+            return true;
+        } catch (error) {
+            console.error(`删除 Cookie "${name}" 失败:`, error);
+            return false;
+        }
+    };
+</script>
+
+@code {
+    @inject IJSRuntime JsRuntime
+
+    @inject IHttpClientFactory HttpClientFactory
+
+    private async Task SyncCookiesToBrowser()
+    {
+        // 1. 获取 HttpClient 实例
+        var httpClient = HttpClientFactory.CreateClient("CookieEnabledClient");
+    
+        // 2. 获取关联的 CookieContainer
+        var handler = GetHandler(httpClient);
+        if (handler?.CookieContainer == null) return;
+    
+        // 3. 获取所有 Cookie
+        var uri = new Uri("https://localhost:9000");
+        var cookieCollection = handler.CookieContainer.GetCookies(uri);
+    
+        // 4. 转换为 JS 可序列化对象
+        var cookiesToSync = new List<object>();
+        foreach (Cookie cookie in cookieCollection)
+        {
+            cookiesToSync.Add(new
+            {
+                name = cookie.Name,
+                value = cookie.Value,
+                expires = cookie.Expires != DateTime.MinValue ? cookie.Expires : (DateTime?)null,
+                path = cookie.Path,
+                domain = cookie.Domain,
+                secure = cookie.Secure,
+                //sameSite = cookie.SameSite.ToString() // None/Lax/Strict
+                sameSite = "Lax"
+            });
+        }
+    
+        // 5. 调用 JS 写入浏览器
+        if (cookiesToSync.Count > 0)
+        {
+            await JsRuntime.InvokeVoidAsync("setCookies", cookiesToSync);
+            Console.WriteLine($"已同步 {cookiesToSync.Count} 个 Cookie 到浏览器");
+        }
+    }
+
+    // 辅助方法：获取 HttpClient 的底层 Handler
+    private HttpClientHandler GetHandler(HttpClient httpClient)
+    {
+        var handlerField = typeof(HttpMessageInvoker).GetField(
+            "_handler",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+        );
+    
+        return handlerField?.GetValue(httpClient) as HttpClientHandler;
+    }
+
+}
+
+@code {
+    private ClaimsPrincipal? user;
+ 
+    protected override async Task OnInitializedAsync()
+    {
+        // 从 AuthenticationStateProvider 获取当前认证状态
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+ 
+        // 取出当前用户
+        user = authState.User;
+ 
+        // 查找名为 "empNo" 的 claim
+        empNo = user.FindFirst("empNo")?.Value;
+    }
+
+    private string empNo = "";
+ 
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await DoLogin();
+    }
+ 
+    private Task DoLogin()
+    {
+        if (userLogin.Name != null)
+        {
+            var user = User.Login(empNo, "1"); // 模拟登录，实际项目中应调用API验证
+            // 给组件层注入一个 roles 示例
+            //FakeAuth.MarkUserAsAuthenticated(user);
+        }
+        return Task.CompletedTask;
+    }
+ 
+    //private void DoLogout() => FakeAuth.MarkUserAsLoggedOut();
+}

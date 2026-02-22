@@ -1,0 +1,936 @@
+﻿@page "/inventory_new"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using ERP_Web.Components.Custom
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using SqlSugar
+@using System.Text.Json;
+@using System.Text.RegularExpressions
+@inject IJSRuntime JS
+@inject MessageService Message
+
+
+<div class="center">
+    <h3 class="center">单据录入</h3>
+</div>
+
+<style>
+    .center {
+        margin: auto;
+        width: 50%;
+        padding: 10px;
+    }
+</style>
+<Card>
+    <Form Model="@Data"
+          OnFinish="OnFinish"
+          OnFinishFailed="OnFinishFailed"
+          WrapperColSpan="24">
+        <GridRow Gutter=@gutter>
+            <GridCol Class="gutter-row" Span="6">
+                <FormItem Label="代码">
+                    <Input Disabled @bind-Value="@context.Code" />
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="分类">
+                    <Select TItem="TrxGroup"
+                            TItemValue="string"
+                            DataSource="@TrxGroups"
+                            @bind-Value="@TrxGroupTemp"
+                            ValueName="@nameof(TrxGroup.Name)"
+                            LabelName="@nameof(TrxGroup.Name)"
+                            GroupName="@nameof(TrxGroup.Note)"
+                            SortByLabel="@SortDirection.Ascending"
+                            SortByGroup="@SortDirection.Descending"
+                            OnSelectedItemChanged="IcTrxGroupChange"
+                            Style="width: 100%;">
+                    </Select>
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="日期">
+                    <DatePicker @bind-Value="@context.Date" Picker="@DatePickerType.Date" style="width: 180px" />
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="仓库">
+                    <Select TItem="Warehouse"
+                            TItemValue="string"
+                            DataSource="@Warehouses"
+                            @bind-Value="@WareH"
+                            ValueName="@nameof(Warehouse.Name)"
+                            LabelName="@nameof(Warehouse.Name)"
+                            SortByLabel="@SortDirection.Ascending"
+                            SortByGroup="@SortDirection.Ascending"
+                            OnSelectedItemChanged="WarehouseChange"
+                            style="width: 180px">
+                    </Select>
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="6" >
+                <FormItem Label="公司">
+                    <Select TItem="Company"
+                            TItemValue="Company"
+                            DataSource="@Coms"
+                            @bind-SelectedItem="@Data.Company"
+                            @bind-Value="@Data.Company"
+                            LabelName="@nameof(Company.Name)">
+                    </Select>
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="6" >
+                <FormItem Label="部门">
+                    <Select TItem="Department"
+                            TItemValue="string"
+                            DataSource="@Departments"
+                            @bind-Value="@Dept"
+                            ValueName="@nameof(Department.Name)"
+                            LabelName="@nameof(Department.Name)"
+                            SortByLabel="@SortDirection.Ascending"
+                            SortByGroup="@SortDirection.Ascending"
+                            OnSelectedItemChanged="DeptChange"
+                            style="width: 180px">
+                    </Select>
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="6" style="width: 180px">
+                <FormItem Label="职员">
+                    <Select TItem="Employee"
+                            TItemValue="Employee"
+                            DataSource="@Emps"
+                            @bind-SelectedItem="@Data.Employee"
+                            @bind-Value="@Data.Employee"
+                            LabelName="@nameof(Employee.Name)"
+                            OnSelectedItemChanged="EmpChange"
+                            style="width: 180px">
+                    </Select>
+                </FormItem>
+            </GridCol>
+
+            <GridCol Class="gutter-row" Span="8">
+                <FormItem Label="摘要">
+                    <Input @bind-Value="@context.Explanation" />
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="2">
+                <VoiceRecognition @ref="voiceRecognition"
+                    Id="Explanation"
+                    OnResultReceived="HandleRecognitionResultForExp"
+                    OnError="HandleRecognitionError"
+                    OnEnd="HandleRecognitionEnd"
+                    ShowDebugInfo="false" /> <!-- 可选调试模式 -->
+            </GridCol>
+        </GridRow>
+
+        <GridRow Gutter=@gutter>
+            <GridCol Class="gutter-row" Span="5">
+                <FormItem Label="总数量">
+                    <Statistic Value="@Data.Quantity" Precision="2" Style="margin: 0" />
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="5">
+                <FormItem Label="金额">
+                    <Statistic Value="@Data.Amount" Precision="2" Style="margin: 0" />
+                </FormItem>
+            </GridCol>
+            <GridCol Class="gutter-row" Span="5">
+                <FormItem Label="含税金额">
+                    <Statistic Value="@Data.AmountIncTax" Precision="2" Style="margin: 0" />
+                </FormItem>
+            </GridCol>
+        </GridRow>
+    </Form>
+</Card>
+@code {
+    string style = "background: #0092ff; padding: 8px 0;";
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+}
+
+<!-- 替换原来的顶部/底部重复的GridRow，只保留这一个即可 -->
+<GridRow Gutter="16" 
+     Align="RowAlign.Middle" 
+     Justify="RowJustify.Start"
+     Style="margin: 12px 0; min-height: 30px;">
+    <!-- 存货选择下拉框 -->
+    <GridCol>
+        <Select DataSource="@IcInvlist2"
+                @bind-Value="@InvName"
+                EnableSearch
+                EnableVirtualization=true
+                ValueName="@nameof(InventoryItem.Name)"
+                LabelName="@nameof(InventoryItem.Name)"
+                TItemValue="string"
+                TItem="InventoryItem"
+                Placeholder="@FinalRes"
+                ShowArrowIcon="true"
+                SearchDebounceMilliseconds="350"
+                Loading="_loading"
+                OnSearch="@(async (value) => await InvOnSearch(value))"
+                OnSelectedItemChanged="OnSelectedItem"
+                Style="width: 240px;" />
+    </GridCol>
+
+    <!-- 语音识别+按钮组，用flex强制垂直对齐 -->
+    <GridCol Style="display: flex; align-items: center; gap: 12px;">
+        <VoiceRecognition @ref="voiceRecognition"
+            Id="uniqueId"
+            OnResultReceived="HandleRecognitionResult"
+            OnError="HandleRecognitionError"
+            OnEnd="HandleRecognitionEnd"
+            ShowDebugInfo="false" />
+
+        <Tag Color="TagColor.Magenta" Style="margin: 0;">@FinalRes</Tag>
+
+        <ButtonGroup>
+            <Button OnClick="check" Type="ButtonType.Primary" Size="ButtonSize.Default" Style="margin-left: 8px">语音识别</Button>
+            <Button OnClick="addRow" Type="ButtonType.Primary" Size="ButtonSize.Default" Style="margin-left: 8px">插入行</Button>
+            <Button OnClick="Submit" Type="@ButtonType.Primary" Size="ButtonSize.Default" Style="margin-left: 8px" HtmlType="submit">提交保存</Button>
+        </ButtonGroup>
+    </GridCol>
+
+    <GridCol>
+        <Select DataSource="@IcInvlist2"
+                @bind-Values="@InvNames"
+                Mode="SelectMode.Multiple"
+                EnableSearch
+                EnableVirtualization=true
+                ValueName="@nameof(InventoryItem.Name)"
+                LabelName="@nameof(InventoryItem.Name)"
+                TItemValue="string"
+                TItem="InventoryItem"
+                Placeholder="可以多选"
+                ShowArrowIcon="true"
+                SearchDebounceMilliseconds="350"
+                Loading="_loading"
+                OnSearch="@(async (value) => await InvOnSearch(value))"
+                OnSelectedItemChanged="OnSelectedItem"
+                Style="width: 240px;" />
+    </GridCol>
+</GridRow>
+
+
+<p></p>
+<Modal Title="保存" 
+    OnOk="@HandleOk"
+    OnCancel="@HandleCancel" 
+    @bind-Visible="@Modal_visible">
+    <p>保存成功</p>
+</Modal>
+@code {
+    // 组件引用
+    private VoiceRecognition? voiceRecognition;
+
+    // 处理识别结果
+    private Task HandleRecognitionResult(VoiceRecognition.RecognitionResult result)
+    {
+        // 获取最终识别文本
+        string finalText = result.FinalTranscript;
+
+        // 获取完整结构化结果
+        var fullResult = result.FullResult;
+        FinalRes = finalText;
+        InvName = null;
+        // 示例：更新表单字段
+        //yourFormField = finalText;
+
+        StateHasChanged();  //触发父主键渲染，显示结果@voiceRecognition?.FinalResult
+        return Task.CompletedTask;
+    }
+
+    private Task HandleRecognitionResultForExp(VoiceRecognition.RecognitionResult result)
+    {
+        // 获取最终识别文本
+        Data.Explanation = result.FinalTranscript;
+        StateHasChanged();  //触发父主键渲染，显示结果@voiceRecognition?.FinalResult
+        return Task.CompletedTask;
+    }
+
+    // 处理识别错误
+    private Task HandleRecognitionError(string errorMsg)
+    {
+        // 示例：显示错误提示
+        Console.WriteLine($"语音识别失败: {errorMsg}");
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    // 处理识别结束
+    private Task HandleRecognitionEnd()
+    {
+        // 示例：执行后续操作
+        Console.WriteLine("语音输入完成");
+        return Task.CompletedTask;
+    }
+
+
+    // 文件上传成功处理
+    private async Task HandleUploadSuccess(UploadFileItem file)
+    {
+        Message.Success($"{file.FileName} 上传成功", 2);
+    }
+
+    // 文件删除成功处理
+    private async Task HandleRemoveSuccess(string fileId)
+    {
+        Message.Success("附件删除成功", 2);
+    }
+}
+
+@code {
+    bool Modal_visible = false;
+    InventoryItem icInv;
+    List<InventoryItem> IcInvlist2;
+    string InvName;
+    IEnumerable<string> InvNames;
+    void check()
+    {
+        if(Data.ITInvInOuts[index].InvCode is not null)
+        {
+            index++;
+            RowKey = index + 1;
+        }
+
+        if(FinalRes is not null){
+            icInv = Invs.Find(x => x.Name.Contains(FinalRes));
+            IcInvlist2 = Invs.Where(x => x.Name.Contains(FinalRes)).ToList();
+
+            if (icInv is not null)
+            {
+                Data.ITInvInOuts[index].InventoryItem = icInv;
+                Data.ITInvInOuts[index].InvCode = icInv.Code;
+                icInv.Specifications = Specification.Select(icInv.Code);
+                if (icInv.Specifications == null || !icInv.Specifications.Any())
+                {
+                    // 处理 Specifications 为 null 或空集合的情况
+                    Console.WriteLine("Specifications 未找到");
+                    return;
+                }
+                Data.ITInvInOuts[index].SKU = icInv.Specifications.Where(x1 => x1.IsDefault == true).First().SKU;
+                Data.ITInvInOuts[index].Specification = icInv.Specifications.Where(x1 => x1.IsDefault == true).First();
+                SqlClient SSC = new SqlClient();
+                InventoryBalance inventoryBalance = SSC.Db.Queryable<InventoryBalance>()
+                .Where(xyz => xyz.WarehouseCode == Data.WarehouseCode && xyz.InvCode == icInv.Code).First();
+                if (Data.TrxType >= 0) //入库单
+                {
+                    //Data.IcInvInOuts[index].UpdatePrice(IcPriceByInvCode(Data.IcInvInOuts[index].InvCode));  //从价格表获取最新价格
+                }
+                else //出库单
+                {
+                    Data.ITInvInOuts[index].PriceIncTax = inventoryBalance?.PriceIncTax ?? 0;  //从库存表获取最新价格
+                    Data.ITInvInOuts[index].Price = inventoryBalance?.Price ?? 0;
+                }
+                RowKey = RowKey + 1;
+                index = index + 1;
+            }
+        }
+    }
+    private void OnSelectedItem(InventoryItem value)
+    {
+
+        // Console.WriteLine($"Failed:{JsonSerializer.Serialize(IcInvlist)}");
+        if (value != null)
+        {
+            value.Specifications = Specification.Select(value.Code);
+            if (value.Specifications == null || !value.Specifications.Any())
+            {
+                // 处理 Specifications 为 null 或空集合的情况
+                Console.WriteLine("Specifications 未找到");
+            }
+            else
+            {
+                Data.ITInvInOuts[index].SKU = value.Specifications.Where(x1 => x1.IsDefault == true).First().SKU;
+                Data.ITInvInOuts[index].InventoryItem.Specifications = value.Specifications;
+                Data.ITInvInOuts[index].Specification = value.Specifications.OrderBy(xx => xx.IsDefault).First();
+            }
+
+            icInv = value;
+            if (Data.ITInvInOuts[index].InvCode is null)
+            {
+                index--;
+                RowKey = index - 1;
+            }
+            //SqlClient SSC = new SqlClient();
+            //InventoryBalance inventoryBalance = SSC.Db.Queryable<InventoryBalance>().Where(xyz => xyz.WarehouseCode == Data.WarehouseCode && xyz.InvCode == value.Code).First();
+            InvCodeEdit = value.Code;
+            Data.ITInvInOuts[index].InventoryItem = value;
+            Data.ITInvInOuts[index].InvCode = value.Code;
+        }
+        foreach (ITInvInOut icInvInOut in Data.ITInvInOuts.Where(M => M.InvCode is null && M.InvCode != "0"))
+        {
+            //icInvInOut.InvTrxUpdateCode(Data.Code);
+        }
+
+        if (Data.ITInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            //addRow();
+        }
+    }
+    private void OnSelectedItemForMultiple(InventoryItem value)
+    {
+
+        // Console.WriteLine($"Failed:{JsonSerializer.Serialize(IcInvlist)}");
+        if (value != null)
+        {
+            value.Specifications = Specification.Select(value.Code);
+            if (value.Specifications == null || !value.Specifications.Any())
+            {
+                // 处理 Specifications 为 null 或空集合的情况
+                Console.WriteLine("Specifications 未找到");
+            }
+            else
+            {
+                Data.ITInvInOuts[index].SKU = value.Specifications.Where(x1 => x1.IsDefault == true).First().SKU;
+                Data.ITInvInOuts[index].InventoryItem.Specifications = value.Specifications;
+                Data.ITInvInOuts[index].Specification = value.Specifications.OrderBy(xx => xx.IsDefault).First();
+            }
+
+            icInv = value;
+            if (Data.ITInvInOuts[index].InvCode is null)
+            {
+                index--;
+                RowKey = index - 1;
+            }
+            //SqlClient SSC = new SqlClient();
+            //InventoryBalance inventoryBalance = SSC.Db.Queryable<InventoryBalance>().Where(xyz => xyz.WarehouseCode == Data.WarehouseCode && xyz.InvCode == value.Code).First();
+            InvCodeEdit = value.Code;
+            Data.ITInvInOuts[index].InventoryItem = value;
+            Data.ITInvInOuts[index].InvCode = value.Code;
+        }
+        foreach (ITInvInOut icInvInOut in Data.ITInvInOuts.Where(M => M.InvCode is null && M.InvCode != "0"))
+        {
+            //icInvInOut.InvTrxUpdateCode(Data.Code);
+        }
+
+        if (Data.ITInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            //addRow();
+        }
+    }
+    public class ApiResult
+    {
+        public List<string[]> result { get; set; }
+    }
+
+    ITInvInOut InvTrxRowSelected;
+}
+@if (Invs.Count() < 1) { }
+else
+{
+    <Form Model="@Data"
+          LabelColSpan="0"
+          WrapperColSpan="24">
+        <FormItem>
+            <Table DataSource="@Data.ITInvInOuts" TItem="ITInvInOut" Context="row" Size="TableSize.Small"
+                   ScrollX="1500"
+                   StickyOffsetHeader="64"
+                   OnRowClick="@OnRowClick"
+                   Resizable
+                   HidePagination Bordered>
+                <PropertyColumn Property="c => Data.ITInvInOuts.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35"> </PropertyColumn>
+                <PropertyColumn Property="c => c.InvCode" Title="存货" Width="120" Fixed="ColumnFixPlacement.Left">
+                    <Input @bind-Value="@row.InvCode" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.InventoryItem.Name" Title="存货名称" Width="200" Fixed="ColumnFixPlacement.Left">
+                    <InputGroup Compact Style="display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        height: 100%; 
+                        padding: 0 10px;
+                        cursor: pointer;">
+                    <Select DataSource="@Invs"
+                            @bind-SelectedItem="row.InventoryItem"
+                            @bind-Value="row.InventoryItem"
+                            EnableSearch
+                            EnableVirtualization=true
+                            LabelName="@nameof(InventoryItem.Name)"
+                            TItemValue="InventoryItem"
+                            TItem="InventoryItem"
+                            Placeholder="输入存货名称"
+                            ShowArrowIcon="true"
+                            HideSelected
+                            SearchDebounceMilliseconds="350"
+                            Key="@(row.InventoryItem?.Code ?? Guid.NewGuid().ToString())"
+                            Loading="_loading"
+                            OnSearch="@(async (value) => await InvOnSearch(value))"
+                            OnSelectedItemChanged="OnSelectedItemChangedHandler">
+                    </Select>
+
+                    <Icon Type="file-image" Theme="IconThemeType.Outline"
+                          OnClick="() =>
+                          {
+                              if (!string.IsNullOrEmpty(row.InventoryItem?.Image))
+                              {
+                                  ImageVisible = true;
+                                  ImageUrl = row.InventoryItem.Image;
+                              }
+                          }"
+                          Style="font-size: 20px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            height: 100%;
+                            padding: 0 10px;
+                            cursor: pointer;
+                            color: #1890ff;" />
+                    </InputGroup>
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Specification.Description" Title="规格" Width="200" Ellipsis>
+                    <Select DataSource="row.InventoryItem.Specifications"
+                            @bind-SelectedItem="row.Specification"
+                            @bind-Value="row.Specification"
+                            LabelName="@nameof(Specification.Description)"
+                            TItemValue="Specification"
+                            TItem="Specification"
+                            Placeholder="请选择规格"
+                            ShowArrowIcon="true"
+                            SearchDebounceMilliseconds="350"
+                            Loading="_loading"
+                            OnSelectedItemChanged="@(value => SpeChanged(row,value))">
+                        <DropdownRender Context="originNode">
+                            <div>
+                                @originNode
+                                <Divider Style="margin: 4px 0"></Divider>
+                                <div style="display: flex; flex-wrap: nowrap; padding: 8px">
+                                    <Input Style="flex: auto" @bind-Value="@SpeDesc" />
+                                    <a style="flex: none; padding: 8px; display: block; cursor: pointer" @onclick="@(value => AddItem(row, value))">
+                                        <Icon Type="@IconType.Outline.Plus" />
+                                        Add Item
+                                    </a>
+                                </div>
+                            </div>
+                        </DropdownRender>
+                    </Select>
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Specification.Unit" Title="单位" Width="150" Ellipsis>
+                    @if (row.InventoryItem.Name != null && row.InventoryItem.Name != string.Empty && (row.Specification.Unit == null || row.Specification.Unit == string.Empty))
+                    {
+                        <Input @bind-Value="@row.Specification.Unit">
+                    }
+                    else
+                    {
+                        <a>@row.Specification.Unit</a>
+                    }
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="@row.Quantity" Precision="2" Min="0" Bordered="false" @bind-Value:after="() => QuantityChange(row)" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Price" Title="单价" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="@row.Price" Bordered="false" Precision="4" Min="0" AutoSize=1 @bind-Value:after="() => PriceChange(row)" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="@row.Amount" Precision="4" Bordered="false" @bind-Value:after="() => PriceChange(row)" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.TaxRate" Title="税率" Align="ColumnAlign.Right" Width="80">
+                    <AntDesign.InputNumber Step=0.01M Min="0" Max="1" @bind-Value="@row.TaxRate" Bordered="false" @bind-Value:after="() => PriceIncTaxChange(row)" Width="70" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.PriceIncTax" Title="含税单价" Align="ColumnAlign.Right" Width="150">
+                    <AntDesign.InputNumber @bind-Value="@row.PriceIncTax" Precision="4" Bordered="false" @bind-Value:after="() => PriceIncTaxChange(row)" Width="140px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Align="ColumnAlign.Right" Width="200">
+                    <AntDesign.InputNumber @bind-Value="@row.AmountIncTax" Precision="4" Bordered="false" @bind-Value:after="() => AmountIncTaxChange(row)" Width="190px" />
+                </PropertyColumn>
+                <PropertyColumn Property="c => c.Note" Title="备注" Align="ColumnAlign.Center" Ellipsis>
+                    <AntDesign.Input @bind-Value="@row.Note" Bordered="false" />
+                </PropertyColumn>
+            </Table>
+        </FormItem>
+    </Form>
+}
+
+<!-- 1. 顶部先放Modal，注意一定要用@bind-Visible双向绑定 -->
+<Modal @bind-Visible="@ImageVisible" 
+       Title="商品图片" 
+       Footer="null" 
+       Width="600"
+       DestroyOnClose="true">
+    <img src="@ImageUrl" style="width: 100%; border-radius: 4px" />
+</Modal>
+
+
+@code
+{
+    bool ImageVisible = false;
+    string ImageUrl;
+    string TrxGroupTemp;
+    string Dept;
+    string WareH;
+    string InvCodeEdit;
+    TrxGroup _selectedItem;
+    int RowKey;
+    int index;
+
+    List<TrxGroup> TrxGroups;
+    List<Department> Departments;
+    List<Employee> Emps;
+    List<Warehouse> Warehouses;
+    List<Company> Coms;
+    List<InventoryItem> Invs;
+    List<IcPrice> IcPrices;
+    List<IcPrice> IcPriceInsertlist = new();
+
+    private void SpeChanged(ITInvInOut row, Specification value)
+    {
+        row.Specification = value;
+        string invCode = row.InventoryItem.Code;
+        if (value != null)
+        {
+            row.SKU = value.SKU;
+        }
+
+        if (Data.ITInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+    string SpeDesc = string.Empty;
+    private void AddItem(ITInvInOut row, MouseEventArgs args)
+    {
+        if (!string.IsNullOrWhiteSpace(SpeDesc))
+        {
+            int newId = row.InventoryItem.Specifications.Count() + 1;
+            row.InventoryItem.Specifications.Add(
+                new Specification("")
+                {
+                    Description = SpeDesc,
+                    InvCode = row.InventoryItem.Code,
+                    IsDefault = false,
+                    ConversionRatio = decimal.Zero
+                }
+            );
+            SpeDesc = string.Empty;
+        }
+    }
+
+    public InventoryTransaction Data = new InventoryTransaction("")
+    {
+        Date = DateOnly.FromDateTime(DateTime.Now),
+        ITInvInOuts = new List<ITInvInOut>()
+    };
+
+    protected override void OnInitialized()
+    {
+        SqlClient SSC = new SqlClient();
+        TrxGroups = SSC.Db.Queryable<TrxGroup>().ToList();
+        Departments = SSC.Db.Queryable<Models.Department>().ToList();
+        Emps = SSC.Db.Queryable<Models.Employee>().ToList();
+        Coms = SSC.Db.Queryable<Models.Company>().ToList();
+        Warehouses = SSC.Db.Queryable<Models.Warehouse>().ToList();
+        Invs = SSC.Db.Queryable<InventoryItem>()
+            .IncludesAllFirstLayer()
+            .ToList();
+        IcPrices = SSC.Db.Queryable<Models.IcPrice>().ToList();
+
+        for (int i = 1; i <= 10; i++)
+        {
+            Data.ITInvInOuts.Add(new ITInvInOut() { InventoryItem = new InventoryItem() });
+        }
+    }
+    private void OnSelectedItemChangedHandler(InventoryItem value)
+    {
+        value.Specifications = Specification.Select(value.Code);
+        if (value.Specifications == null || !value.Specifications.Any())
+        {
+            // 处理 Specifications 为 null 或空集合的情况
+            Console.WriteLine("Specifications 未找到");
+            return;
+        }
+        Data.ITInvInOuts[index].SKU = value.Specifications.Where(x1 => x1.IsDefault == true).First().SKU;
+        Data.ITInvInOuts[index].Specification = value.Specifications.Where(x1 => x1.IsDefault == true).First();
+        Data.ITInvInOuts[index].InvCode = value.Code;
+        Data.ITInvInOuts[index].InventoryItem = value;
+        if (value != null)
+        {
+            InvCodeEdit = value.Code;
+            foreach (ITInvInOut icInvInOut in Data.ITInvInOuts.Where(M => M.InventoryItem.Code != "0" && M.InventoryItem.Name == value.Name))
+            {
+                icInvInOut.InventoryItem = value;
+                icInvInOut.InvCode = value.Code;
+                if (Data.TrxType >= 0) //入库单
+                {
+                    //icInvInOut.UpdatePrice(IcPriceByInvCode(icInvInOut.InvCode));  //从价格表获取最新价格
+                }
+                else //出库单
+                {
+                    SqlClient SSC = new SqlClient();
+                    if (icInvInOut.InventoryItem.CostingMethodCode == "FIFO")
+                    {
+                        //List<FIFOInventoryLot> FIFOInventoryLots = SSC.Db.Queryable<FIFOInventoryLot>().Where(xyz => xyz.WarehouseCode == Data.WarehouseCode && xyz.InvCode == value.Code).ToList();
+
+                        icInvInOut.Price = InventoryPricingExtension.CalculateOutboundPrice(Data.WarehouseCode, value.Code, icInvInOut.SKU, icInvInOut.Quantity, icInvInOut.InventoryItem.CostingMethodCode);
+                        icInvInOut.PriceChange();
+                    }
+                    else
+                    {
+                        icInvInOut.Price = InventoryPricingExtension.CalculateOutboundPrice(Data.WarehouseCode, value.Code, icInvInOut.SKU, icInvInOut.Quantity, icInvInOut.InventoryItem.CostingMethodCode);
+                        icInvInOut.PriceChange();
+                    }
+                }
+            }
+        }
+
+        if (Data.ITInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+
+    }
+
+    private void OnSearch(string value)
+    {
+        Console.WriteLine($"search: {value}");
+    }
+
+    private void OnRowClick(RowData<ITInvInOut> value)
+    {
+        RowKey = value.RowIndex;
+        index = value.RowIndex - 1;
+        Console.WriteLine($"search: {RowKey}");
+    }
+
+    void IcTrxGroupChange(TrxGroup value)
+    {
+        _selectedItem = value;
+        Data.TrxGroupCode = value?.Code;
+        Data.TrxGroup = value;
+        Data.TrxType = value.TrxType;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void WarehouseChange(Warehouse value)
+    {
+        Data.WarehouseCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void DeptChange(Department value)
+    {
+        Data.DepartmentCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void EmpChange(Employee value)
+    {
+        Data.EmployeeCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void InvChange(InventoryItem value)
+    {
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+
+    void QuantityChange(ITInvInOut icInvInOut)
+    {
+        if (Data.TrxGroup.TrxType==-1)
+        {
+            try
+            {
+                icInvInOut.Price = InventoryPricingExtension.CalculateOutboundPrice(Data.WarehouseCode, icInvInOut.InvCode, icInvInOut.SKU, icInvInOut.Quantity, icInvInOut.InventoryItem.CostingMethodCode);
+            }
+            catch (Exception e)
+            {
+                //LogError(e, "Shape processing failed.");
+                throw;
+            }
+        }
+
+        icInvInOut.QuantityChange();
+        icInvInOut.PriceChange();
+        Data.UpdateAmount();
+    }
+    void PriceChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.PriceChange();
+        Data.UpdateAmount();
+    }
+
+    private void PriceIncTaxChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.PriceIncTaxChange();
+        Data.UpdateAmount();
+    }
+
+    private void AmountChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.AmountChange();
+        Data.UpdateAmount();
+    }
+
+    private void AmountIncTaxChange(ITInvInOut icInvInOut)
+    {
+        icInvInOut.AmountIncTaxChange();
+        Data.UpdateAmount();
+    }
+
+    private decimal IcPriceByInvCode(string Code)
+    {
+        decimal Price = 0M;
+        foreach (IcPrice IcPrice in IcPrices.Where(x => x.InvCode == Code))
+        {
+            Price = IcPrice.Price;
+        }
+        return Price;
+    }
+
+    void addRow()
+    {
+        for (int i = 1; i <= 5; i++)
+        {
+            Data.ITInvInOuts.Add(new ITInvInOut() {InventoryItem = new InventoryItem()});
+        }
+
+        Console.WriteLine($"Success:{JsonSerializer.Serialize("char")}");
+    }
+
+    private List<InventoryItem> GetIcInvListByInvTrx(List<ITInvInOut> IcInvInOuts)
+    {
+        List<InventoryItem> icInvs = new List<InventoryItem>();
+        foreach (ITInvInOut icInvInOut in IcInvInOuts)
+        {
+            icInvs.Add(icInvInOut.InventoryItem);
+        }
+        return icInvs;
+    }
+    private void Submit()
+    {
+        Data.ITInvInOuts.RemoveAll(item => item.InvCode == null || item.Quantity == 0);
+        SqlClient SSC = new SqlClient();
+
+        Data.Insert();
+        //InventoryBalance.UpdateBalance(Data);
+        int res;
+        IcPriceInsertlist.RemoveAll(xx => xx.InvCode == null || xx.Price == 0);
+        res = SSC.Db.Insertable(IcPriceInsertlist).ExecuteCommand();
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(Data)}");
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}");
+        Modal_visible = true;
+    }
+    private void HandleOk()
+    {
+        Data.ITInvInOuts = [];
+
+    }
+    private void HandleCancel()
+    {
+        Modal_visible = false;
+    }
+    private void OnFinish(EditContext editContext)
+    {
+        Data.TrxType = 1;
+        Data.Amount = 0;
+        foreach (ITInvInOut icInvInOut in Data.ITInvInOuts)
+        {
+            Data.Amount += icInvInOut.Amount;
+            Data.AmountIncTax += icInvInOut.AmountIncTax;
+            Data.Quantity += icInvInOut.Quantity;
+            Data.AmountIncTax = icInvInOut.AmountIncTax;
+
+            IcPrice icPrice = new IcPrice { InvCode = icInvInOut.InvCode, Quantity = icInvInOut.Quantity, Price = icInvInOut.Price, Amount = icInvInOut.Amount };
+
+            IcPriceInsertlist.Add(icPrice);
+        }
+        int res;
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(Data)}");
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        Console.WriteLine($"Failed:{JsonSerializer.Serialize(Data.Code)}");
+    }
+
+
+
+}
+
+@code
+{
+    Task<string> _oldTask;
+    bool _loading;
+    int oldInvCode = 0;
+    private async Task InvOnSearch(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (_oldTask == null || _oldTask.IsCompleted)
+            {
+                _loading = true;
+                StateHasChanged();
+            }
+        }
+        _loading = false;
+        StateHasChanged();
+    }
+
+    // public class ApiResult
+    // {
+    //     public List<string[]> result { get; set; }
+    // }
+}
+@code{
+
+    public string FinalRes { get; set; }
+    public string AllRes { get; set; }
+    public EventCallback<ChangeEventArgs> FinalResChanged { get; set; }
+
+    private void OnFinalResValueChanged(ChangeEventArgs e)
+    {
+        FinalRes = e.Value?.ToString();
+        InvName = null;
+    }
+
+    private void OnAllResValueChanged(ChangeEventArgs e)
+    {
+        AllRes = e.Value?.ToString();
+    }
+
+    private async Task SpeechReturn(){
+        AllRes = new(await JS.InvokeAsync<string>("SpeechAllReturn"));
+        FinalRes = new(await JS.InvokeAsync<string>("SpeechFinalReturn"));
+        FinalRes = Regex.Replace(FinalRes, @"[\p{P}-[.]]", string.Empty);
+    }
+
+    void GetRes()
+    {
+        SpeechReturn().Wait();
+        speechToString(AllRes);
+    }
+
+    List<string> speechToString(string value)
+    {
+        List<string> res = [];
+        var json = JsonDocument.Parse(value).RootElement;
+        var json2 = json.GetProperty("paragraphs");
+
+        foreach (JsonElement je in json2.EnumerateArray())
+        {
+            var sentences = je.GetProperty("sentences")[1];
+            var finalTranscript = sentences.GetProperty("finalTranscript");
+            Console.WriteLine($"结果: {finalTranscript.GetString()}");
+            if (finalTranscript.GetString() is not null)
+                res.Add(finalTranscript.GetString());
+        }
+        return res;
+    }
+
+    private async Task Speechtest()
+    {
+        string result = "";
+        // result = new(await JS.InvokeAsync<string>("SpeechRecognition"));
+
+        result = FinalRes;
+		var result2 = AllRes;
+    }
+
+}
+
+

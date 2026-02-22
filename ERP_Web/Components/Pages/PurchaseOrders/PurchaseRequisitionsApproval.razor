@@ -1,0 +1,291 @@
+﻿@page "/PrApproval"
+@using AntDesign.TableModels
+@using ERP_Web.Components.Custom
+@using ERP_Web.Core.Constants
+@using ERP_Web.Models.PrivilegeHub
+@using ERP_Web.Repository
+@using ERP_Web.Models
+@using ERP_Web.Core.Utilities
+@using System.Text.Json
+@inject NavigationManager Navigation
+
+<h3>PurchaseRequisitionsApp</h3>
+<PageHeader Title="采购申请记录"></PageHeader>
+<Card>
+    <FilterPanel @ref="filterPanel"
+                 Filters="@Filters"
+                 FilterModel="@Pr"
+                 gutter="@gutter"
+                 OnSearch="Refresh">
+    </FilterPanel>
+</Card>
+@code {
+    private List<FilterPanel.FilterItem> Filters = new();
+    private FilterPanel filterPanel; // 引用组件实例
+    IEnumerable<string> MonthSelected, YearSelected, DeptSelected, WarehSelected;  //选择的月份和年度、仓库
+    DateOnly?[] DateOnlys = new DateOnly?[2];
+    List<Department> Deptlist = Department.Select();
+    List<string> MonthSe = new List<string>();
+    List<string> YearSe = new List<string>();
+    List<Warehouse> Warehouselist = Warehouse.Select();
+    public List<IConditionalModel> conModels = new List<IConditionalModel>();  //查询条件列表
+
+    /// <summary>
+    /// 设置筛选条件选项--生成筛选条件卡片
+    /// </summary>
+    private void InitializeFilters()
+    {
+
+        // 年份筛选
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "年份",
+            Type = FilterPanel.FilterType.Select,
+            Options = YearSe.Select(y => new FilterPanel.OptionItem { Value = y, Label = y }).ToList(),
+            SelectedValues = YearSelected
+        });
+
+        // 月份筛选
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "月份",
+            Type = FilterPanel.FilterType.Select,
+            Options = MonthSe.Select(m => new FilterPanel.OptionItem { Value = m, Label = m }).ToList(),
+            SelectedValues = MonthSelected
+        });
+
+        // 日期范围
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "日期范围",
+            Type = FilterPanel.FilterType.DateRange,
+            DateRange = DateOnlys,
+            Span = 12
+        });
+
+        // 单号筛选
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "单号",
+            Type = FilterPanel.FilterType.Like,
+            Placeholder = string.Empty
+        });
+        // 摘要筛选
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "摘要",
+            Type = FilterPanel.FilterType.Like,
+            Placeholder = string.Empty
+        });
+
+        // 部门筛选
+        Filters.Add(new FilterPanel.FilterItem
+        {
+            Label = "部门",
+            Type = FilterPanel.FilterType.Select,
+            Options = Deptlist.Select(d => new FilterPanel.OptionItem
+            {
+                Value = d.Code,
+                Label = d.Name
+            }).ToList(),
+            SelectedValues = DeptSelected
+        });
+
+    }
+    /// <summary>
+    /// 初始化筛选条件范围
+    /// </summary>
+    public void FiltrateOnInitialized()
+    {
+        const int min = 1;
+        const int max = 12;
+        MonthSe = new List<string>();   //月份选项
+        YearSe = new List<string>();    //年度选项
+
+        for (var i = min; max >= i; i++)
+        {
+            var value = Convert.ToString(i);
+            var value2 = Convert.ToString(2022 + i);
+            MonthSe.Add(value);
+            YearSe.Add(value2);
+        }
+        if (YearSelected == null || YearSelected.Count() == 0)
+        {
+            YearSelected = new List<string>() { DateTime.Now.Year.ToString() };
+        }
+
+        if (MonthSelected == null || MonthSelected.Count() == 0)
+        {
+            MonthSelected = new List<string>() { DateTime.Now.Month.ToString() };
+        }
+        //Warehouselist = Warehouse.Select();
+        Deptlist = Department.Select();
+    }
+
+    /// <summary>
+    /// 执行筛选
+    /// </summary>
+    // ✅ 改成异步查询，加空校验和异常捕获
+    public void Refresh()
+    {
+        // 直接从filterPanel获取条件
+        var conModels = filterPanel.GenerateConditionalModels();
+
+        try
+        {
+            //ConModelsRefresh();
+            User user = UserContext.CurrentUser;
+            if (user == null)
+            {
+                data = new List<PurchaseRequisition>();
+                return;
+            }
+
+            SqlClient SSC = new SqlClient();
+            // ✅ 加空校验：ApprovalProcess不为null才判断子项，避免空引用
+            data = SSC.Db.Queryable<PurchaseRequisition>()
+                .Includes(y => y.ApprovalProcess, Ap => Ap.Steps)
+                .Includes(y => y.Department)
+                .Includes(y => y.Employee)
+                .Where(conModels)
+                .Where(y => y.ApprovalProcess != null &&
+                            y.ApprovalProcess.Steps.Any(step =>
+                                step.Status == 0 &&
+                                step.ApproverCode == user.Code
+                            ))
+                .ToList();
+
+            Console.WriteLine($"Success:{JsonSerializer.Serialize(conModels)}");
+        }
+        catch (Exception ex)
+        {
+            // ✅ 打印错误日志，方便排查
+            Console.WriteLine($"查询采购申请失败：{ex.Message}");
+            data = new List<PurchaseRequisition>();
+        }
+    }
+
+    /// <summary>
+    /// 初次刷新表格内容
+    /// </summary>
+    /// <param name="firstRender"></param>
+    /// <returns></returns>
+    // 把你原来注释的这段代码替换成下面的实现
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 只在页面第一次渲染完成后执行一次
+        if (firstRender)
+        {
+            // 延迟0.5秒执行，确保FilterPanel组件完全初始化完成
+            await Task.Delay(500);
+            // 确保filterPanel已初始化才执行刷新
+            if (filterPanel != null)
+            {
+                // 调用刷新方法，用InvokeAsync保证UI线程安全
+                await InvokeAsync(Refresh);
+                //StateHasChanged();
+
+            }
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+}
+
+<Table DataSource="@data" TItem="PurchaseRequisition" Context="row" Size="TableSize.Small" RowKey="Row => Row.Id"
+       OnRowClick="@OnRowClick"
+       Resizable
+       HidePagination Bordered
+       ScrollX="1500" StickyOffsetHeader="64">
+    <PropertyColumn Property="c => data.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35"> </PropertyColumn>
+    <PropertyColumn Property="c => c.TrxNo" Title="单号" Width="120" Fixed="ColumnFixPlacement.Left">
+        <a>@row.TrxNo</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Date" Title="日期" Width="120" Fixed="ColumnFixPlacement.Left">
+        <a>@row.Date.ToString()</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.PRTrxGroupCode" Title="采购类型" Width="120" Fixed="ColumnFixPlacement.Left">
+        <a>@row.PRTrxGroupCode</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Explanation" Title="摘要" Width="150" Fixed="ColumnFixPlacement.Left">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.GetStatusDisplayName()" Title="状态" Width="150" Fixed="ColumnFixPlacement.Left">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Department.Name" Title="部门" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Employee.Name" Title="职员" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="150">
+        <a>@row.Quantity</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Align="ColumnAlign.Right" Width="150">
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InsertUser" Title="操作员" Width="120">
+        <a>@row.InsertUser</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InsertTime" Title="创建日期" Width="160">
+        <a>@row.InsertTime.ToString()</a>
+    </PropertyColumn>
+
+    <PropertyColumn Property="c => c.Checker" Title="审批人" Width="120">
+        <a>@row.Checker</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Active" Title="有效" Width="120">
+        <a>@(row.Active == true ? "是" : "否")</a>
+    </PropertyColumn>
+
+    <ActionColumn Title="Action" Width="120" Fixed="ColumnFixPlacement.Right">
+        <a href="javascript:void(0)" @onclick="() => NavigateToView(row.Id)">View</a>
+        <a @onclick="() => row.Approve()">审批</a>
+        <a @onclick="() => row.Delete()">Delete</a>
+    </ActionColumn>
+</Table>
+
+
+@code {
+
+    private void NavigateToView(long id)
+    {
+        Navigation.NavigateTo($"/PrView/{id}");
+    }
+}
+@code
+{
+
+    PurchaseRequisition Pr = new PurchaseRequisition("");
+
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+
+    // ✅ 改成异步初始化，避免阻塞
+    protected override async Task OnInitializedAsync()
+    {
+        FiltrateOnInitialized();
+        InitializeFilters();
+        //Refresh();
+    }
+
+    private void OnSelectedItemsChangedHandler(IEnumerable<string> values)
+    {
+        if (values != null)
+            Console.WriteLine($"selected: ${string.Join(",", values)}");
+    }
+
+    List<PurchaseRequisition> data = new List<PurchaseRequisition>();
+    int RowKey, index;
+
+    private void OnRowClick(RowData<PurchaseRequisition> value)
+    {
+        RowKey = value.RowIndex;
+        index = value.RowIndex - 1;
+        Console.WriteLine($"search: {RowKey}");
+    }
+}

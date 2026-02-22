@@ -1,0 +1,488 @@
+﻿@page "/inventory_records2"
+
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using M = ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+@using System.Text.Json;
+@using System.Linq;
+
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+
+
+<label>年度</label>
+<Select Mode="SelectMode.Multiple"
+        Placeholder="Please select"
+        @bind-Values="@YearSelected"
+        TItemValue="string"
+        TItem="string"
+        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+        Style="width: 30%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+    <SelectOptions>
+        @foreach (var item in YearSe)
+        {
+            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+        }
+    </SelectOptions>
+</Select>
+<label>月份</label>
+<Select Mode="SelectMode.Multiple"
+        Placeholder="Please select"
+        @bind-Values="@MonthSelected"
+        TItemValue="string"
+        TItem="string"
+        title="月份"
+        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+        Style="width: 30%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+    <SelectOptions>
+        @foreach (var item in MonthSe)
+        {
+            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+        }
+    </SelectOptions>
+</Select>
+<label>仓库</label>
+<Select Mode="SelectMode.Multiple"
+    TItem="M.Warehouse"
+    TItemValue="string"
+    DataSource="@Warehouselist"
+    @bind-Values="@WarehSelected"
+    ValueName="@nameof(M.Warehouse.Code)"
+    LabelName="@nameof(M.Warehouse.Name)"
+    SortByLabel="@SortDirection.Ascending"
+    SortByGroup="@SortDirection.Ascending"
+    OnSelectedItemChanged="WarehouseChange"
+    DefaultActiveFirstOption="true"
+    style="width: 180px">
+</Select>
+
+<Button OnClick="Refresh" Type="@ButtonType.Primary" Size="ButtonSize.Small" HtmlType="submit">
+    搜索
+</Button>
+
+@code
+{
+    List<string> MonthSe, YearSe;
+    List<M.Warehouse> Warehouselist;
+    IEnumerable<string> MonthSelected, YearSelected, WarehSelected;  //选择的月份和年度、仓库
+    string WareH;
+    void WarehouseChange(M.Warehouse ware)
+    {
+       // Warehouselist.Add(WareH)
+        Console.WriteLine($"selected warehouse: {ware?.Name}");
+	}
+
+    void SelectOnIn()
+    {
+        const int min = 1;
+        const int max = 12;
+        MonthSe = new List<string>();   //月份选项
+        YearSe = new List<string>();    //年度选项
+
+        for (var i = min; max >= i; i++)
+        {
+            var value = Convert.ToString(i);
+            var value2= Convert.ToString(2022+i);
+            MonthSe.Add(value);
+            YearSe.Add(value2);
+        }
+
+        if (YearSelected == null || YearSelected.Count() == 0)
+        {
+            // string year = DateTime.Now.Year.ToString();
+            // YearSelected = new List<string>() { year };
+            YearSelected = new List<string>() { "2025" };
+        }
+  //       if(WarehSelected == null || WarehSelected.Count() ==0)
+  //       {
+  //           WarehSelected = new List<string>() { WareH };
+		// }
+    }
+
+    private void OnSelectedItemsChangedHandler(IEnumerable<string> values)
+    {
+        if (values != null)
+            Console.WriteLine($"selected: ${string.Join(",", values)}");
+    }
+    public List<IConditionalModel> conModels ;
+    public void ConModelsRefresh()
+    {
+        conModels = new List<IConditionalModel>();
+        var ConMon = new ConditionalCollections();  //       Condition condition = new Condition
+        var ConMonList = new List<KeyValuePair<WhereType, SqlSugar.ConditionalModel>>();
+
+        foreach (var Year in YearSelected)
+        {
+            var con = new ConditionalModel()
+            {
+                ConditionalType = ConditionalType.Equal, //IN
+                FieldName = "FiscalYear",
+                FieldValue = Year,
+                CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+            };
+            conModels.Add(con);
+        }
+
+        if (MonthSelected != null)
+        {
+            int i = 1;
+            foreach (var Mon in MonthSelected)
+            {
+                var conM = new ConditionalModel();
+                KeyValuePair<WhereType, SqlSugar.ConditionalModel> conKey;
+                if (i == 1)
+                {
+                    conKey = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.And,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "Period",
+                        FieldValue = Mon,
+                        CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+                    });
+                    i++;
+                }
+                else
+                {
+                    conKey = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.Or,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "Period",
+                        FieldValue = Mon,
+                        CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+                    });
+                }
+                ConMonList.Add(conKey);
+            }
+        }
+
+        if (WarehSelected != null)
+        {
+            int j = 1;
+            foreach (var Wareh in WarehSelected)
+            {
+                var conW = new ConditionalModel();
+                KeyValuePair<WhereType, SqlSugar.ConditionalModel> conKeyW;
+                if (j == 1)
+                {
+                    conKeyW = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.And,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "WarehouseCode",
+                        FieldValue = Wareh,
+                        CSharpTypeName = "string" //设置类型 和C#名称一样常用的支持
+                    });
+                    j++;
+                }
+                else
+                {
+                    conKeyW = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.Or,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "WarehouseCode",
+                        FieldValue = Wareh,
+                        CSharpTypeName = "string" //设置类型 和C#名称一样常用的支持
+                    });
+                }
+                ConMonList.Add(conKeyW);
+            }
+		}
+        ConMon.ConditionalList = ConMonList;
+        conModels.Add(ConMon);
+    }
+
+    public void Refresh()
+    {
+        ConModelsRefresh();
+        SqlClient SSC = new SqlClient();
+        IcList = SSC.Db.Queryable<M.Ic>()
+            .Includes(y => y.TrxGroup)
+            .Includes(y => y.Department)
+            .Includes(y => y.Warehouse)
+            // .Includes(y => y.Employee)
+            .Where(conModels).ToList();
+
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcList.Count())}");
+
+        _table.ResetData();
+    }
+}
+
+<h5>
+    已选项目:
+    @if (IcRowSelected != null)
+    {
+        @foreach (var selected in IcRowSelected)
+        {
+            <Tag @key="selected" Closable OnClose="e => RemoveSelection(selected.Code.ToString())">@selected.Code</Tag>
+        }
+        <Button Danger Size="ButtonSize.Small" OnClick="@(e => { table.SetSelection([]); })">Clear</Button>
+    }
+</h5>
+@if(IcList == null || IcList.Count() == 0)
+{
+    <Alert Type="AlertType.Info" >
+        No Data
+    </Alert>
+}else{
+<Table @ref="_table" TItem="M.Ic" 
+    Total="Ic_total" 
+    PageSize="@_PSize"
+    PageSizeChanged="PSizeChanged"
+    DataSource="IcList" 
+    @bind-SelectedRows="IcRowSelected" 
+    OnChange="OnIcChange"
+    ScrollX ="1000px"
+    ScrollY ="600px"
+    EnableVirtualization
+    RowKey="x => x.Code" OnSelectAll="OnSelectAll" Resizable Size="TableSize.Middle">
+    <Selection />
+    <PropertyColumn Property="c => IcList.IndexOf(c) + 1" Title="序号" Width="50px"/>
+    <PropertyColumn Property="c => c.Code" Sortable>
+        <a>@context.Code</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Date" Title="日期" Sortable>
+        <a>@context.Date</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.TrxGroup.Name" Title="库存类型" Sortable>
+        <a>@context.TrxGroup.Name</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Warehouse.Name" Title="仓库" Sortable>
+        <a>@context.Warehouse.Name</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Company.Name" Title="公司" Sortable>
+        <a>@context.Company.Name</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Department.Name" Title="部门" Sortable>
+        <a>@context.Department.Name</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Employee.Name" Title="职员" Sortable>
+        <a>@context.Employee.Name</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Explanation" Title="摘要" Sortable>
+        <a>@context.Explanation</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Quantity" Title="数量" Sortable>
+        <a>@context.Quantity</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Amount" Title="金额" Sortable>
+        <a>@context.Amount</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Sortable>
+        <a>@context.AmountIncTax</a>
+    </PropertyColumn>
+    <ActionColumn Title="Action">
+            <a target="_blank" href="/icview/@context.Code">View</a>
+        <a @onclick="() => IcStartEdit(IcRowSelected)">Edit</a>
+        <a @onclick="() => IcDelete(IcRowSelected)">Delete</a>
+    </ActionColumn>
+</Table>
+}
+@code {
+    List<M.Ic> IcList;
+    IEnumerable<M.Ic> IcRowSelected = [];
+    int Ic_total;
+
+    protected override void OnInitialized()
+    {
+        SqlClient SSC = new SqlClient();
+        Warehouselist = SSC.Db.Queryable<M.Warehouse>().ToList();
+        SelectOnIn();
+        if (YearSelected == null || YearSelected.Count() == 0)
+        {
+            // string year = DateTime.Now.Year.ToString();
+            //YearSelected = new List<string>() { year };
+
+            YearSelected = new List<string>() { "2025" };
+        }
+        ConModelsRefresh();
+        IcList = SSC.Db.Queryable<M.Ic>()
+            .Includes(y => y.TrxGroup)
+            .Includes(y => y.Department)
+            .Includes(y => y.Warehouse)
+            // .Includes(y => y.Employee)
+            // .IncludesAllFirstLayer()
+            // .IncludesAllSecondLayer(xc => xc.InvTrxs)
+            .Where(conModels).ToList();
+        if (IcList== null)
+        {
+            IcList = new List<M.Ic>();
+            IcList.Add(new M.Ic()
+            {
+                Code = 0,
+                Date = DateOnly.FromDateTime(DateTime.Now),
+                Explanation = "No Data"
+            });
+        }
+        Ic_total = IcList.Count();
+
+    }
+
+    public class Condition
+    {
+        public string FieldName { get; set; }
+        public string ConditionalType { get; set; }
+        public string FieldValue { get; set; }
+    }
+
+
+    void IcStartEdit(IEnumerable<M.Ic> row)
+    {
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcList)}");
+    }
+
+    async Task IcDelete(IEnumerable<M.Ic> row)
+    {
+
+    }
+
+    IEnumerable<M.Ic> Ic_selectedRows = [];
+
+    ITable _table;
+    List<ItemData> _dataSource;
+    int _total;
+    int _PSize = 20;
+
+    void PSizeChanged(int i)
+    {
+        _PSize = i;
+    }
+
+    void OnIcChange(QueryModel<M.Ic> query)
+    {
+        SqlClient SSC = new SqlClient();
+        IcList = SSC.Db.Queryable<M.Ic>()
+            .Includes(y => y.TrxGroup)
+            .Includes(y => y.Department)
+            .Includes(y => y.Warehouse)
+            // .Includes(y => y.Company)
+            // .Includes(y => y.Employee)    暂时不获取数据，要调整
+            // .IncludesAllFirstLayer()
+            // .IncludesAllSecondLayer(xc => xc.InvTrxs)
+            .Where(conModels).ToList();
+        if (IcList == null)
+        {
+            IcList = new List<M.Ic>();
+            IcList.Add(new M.Ic()
+            {
+                Code = 0,
+                Date = DateOnly.FromDateTime(DateTime.Now),
+                Explanation = "No Data"
+            });
+        }
+        Ic_total = IcList.Count();
+    }
+
+    void StartEdit(M.Ic row)
+    {
+        var data = row == null ? new() : row;
+        ModalRef<bool> modalRef = default;
+        IForm form = default;
+        modalRef = ModalService.CreateModal<bool>(new()
+                {
+                    Title = data.Code > 0 ? "Edit" : "New",
+                    Content = @<Form @ref="form" Model="data" OnFinish="()=> modalRef.OkAsync(true)" LabelColSpan="6" WrapperColSpan="18">
+        <GenerateFormItem NotGenerate="@(x=> x == "CODE")" />
+    </Form>
+    ,
+            OnOk = async (e) =>
+            {
+                if (!form.Validate())
+                {
+                    return;
+                }
+
+                // save db and refresh
+                modalRef.SetConfirmLoading(true);
+
+                if (data.Code > 0)
+                {
+                    var index = IcList.FindIndex(x => x.Code == data.Code);
+                    IcList[index] = data;
+                }
+                else
+                {
+                    data.Code = IcList.Max(x => x.Code) + 1;
+                    IcList.Add(data);
+                }
+
+                await Task.Delay(1000);
+
+                await modalRef.CloseAsync();
+                _table.ReloadData();
+                StateHasChanged();
+            },
+            OnCancel = async (e) =>
+            {
+                if (form.IsModified && (!await Comfirm("The form have been updated, are you sure quit?")))
+                {
+                    return;
+                }
+                await modalRef.CloseAsync();
+            }
+        });
+    }
+
+    async Task DeleteAll()
+    {
+        if (!await Comfirm($"Are you sure delete {Ic_selectedRows.Count()} rows?"))
+            return;
+
+        IcList = IcList.Except(Ic_selectedRows).ToList();
+        Ic_selectedRows = [];
+        _table.ReloadData();
+    }
+
+    async Task Delete(ItemData row)
+    {
+        if (!await Comfirm($"Are you sure delete [{row.Name}]?"))
+            return;
+
+        // IcList = IcList.Except(new[] { row }).ToList();
+        _table.ReloadData();
+    }
+
+    private async Task<bool> Comfirm(string message)
+    {
+        return await ComfirmService.Show(message, "Confirm", ConfirmButtons.YesNo, ConfirmIcon.Warning) == ConfirmResult.Yes;
+    }
+
+    record ItemData
+    {
+        public int Id { get; set; }
+        [Required]
+        public string Name { get; set; }
+        public int Age { get; set; }
+        public string Address { get; set; }
+    }
+
+    ITable table;
+
+    public void RemoveSelection(string key)
+    {
+        // this.selectedRows = selectedRows.Where(x => x.Name != key).ToList();
+    }
+
+    void OnSelectAll(bool selectAll)
+    {
+        Console.WriteLine($"select all row? {selectAll}");
+    }
+}

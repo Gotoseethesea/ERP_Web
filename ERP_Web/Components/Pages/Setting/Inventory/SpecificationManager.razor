@@ -1,0 +1,112 @@
+﻿@using ERP_Web.Models
+
+@if (string.IsNullOrEmpty(InvCode))
+{
+    <Alert Message="请先在存货档案列表中选择一个商品" Type="AlertType.Info" ShowIcon="true" />
+}
+else
+{
+    <Card Title="@($"商品规格管理 - {InvCode}")">
+        <Button Type="ButtonType.Primary" OnClick="ShowAddSpecDialog" Style="margin-bottom:16px">
+            <Icon Type="plus" /> 添加规格
+        </Button>
+        
+        <AntDesign.Table DataSource="@specifications" TItem="Specification" Loading="@loading">
+            <PropertyColumn Property="@(c => c.SKU)" Title="SKU" />
+            <PropertyColumn Property="@(c => c.Description)" Title="规格描述" />
+            <PropertyColumn Property="@(c => c.Unit)" Title="单位" />
+            <PropertyColumn Property="@(c => c.ConversionRatio)" Title="换算率" />
+            <ActionColumn Title="默认规格">
+                    @if (context.IsDefault == true)
+                    {
+                    <Tag Color="TagColor.Green">是</Tag>
+                    }
+                    else
+                    {
+                    <Button Size="ButtonSize.Small" OnClick="@(e => SetAsDefault(context))">
+                            设为默认
+                        </Button>
+                    }
+            </ActionColumn>
+            <ActionColumn Title="操作">
+                    <Space>
+                        <Button Size="ButtonSize.Small" OnClick="@(e => ShowEditSpecDialog(context))">
+                            编辑
+                        </Button>
+                        <Popconfirm Title="确定删除此规格？" OnConfirm="@(e => DeleteSpec(context))">
+                        <Button Size="ButtonSize.Small" Danger>删除</Button>
+                        </Popconfirm>
+                    </Space>
+            </ActionColumn>
+        </AntDesign.Table>
+    </Card>
+    
+    <SpecificationEditDialog @ref="editDialog" 
+                             OnSave="HandleSpecSaved" InvCode="@InvCode" />
+}
+
+@code {
+    [Parameter]
+    public string InvCode { get; set; }
+
+    [Parameter]
+    public EventCallback OnSpecUpdated { get; set; }
+    private SpecificationEditDialog editDialog;
+    private List<Specification> specifications = new();
+    private bool loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(InvCode))
+        {
+            await LoadSpecifications();
+        }
+    }
+
+    private async Task LoadSpecifications()
+    {
+        loading = true;
+        StateHasChanged();
+        try
+        {
+            specifications = Specification.GetByInvCode(InvCode);
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowAddSpecDialog()
+    {
+        editDialog.Show(new Specification(InvCode) { InvCode = InvCode });
+    }
+
+    private void ShowEditSpecDialog(Specification spec)
+    {
+        editDialog.Show(spec);
+    }
+
+    private async Task SetAsDefault(Specification spec)
+    {
+        //await Specification.SetAsDefault(spec.Id, InvCode);
+        await LoadSpecifications();
+        //OnSpecUpdated?.InvokeAsync();
+    }
+
+    private async Task DeleteSpec(Specification spec)
+    {
+        //await SpecificationService.Delete(spec.Id);
+        await LoadSpecifications();
+        //OnSpecUpdated?.InvokeAsync();
+    }
+
+    private async Task HandleSpecSaved()
+    {
+        editDialog.currentSpec.InvCode = InvCode;
+        editDialog.currentSpec.Insert();
+        OnSpecUpdated.InvokeAsync();
+        await LoadSpecifications();
+    }
+}
