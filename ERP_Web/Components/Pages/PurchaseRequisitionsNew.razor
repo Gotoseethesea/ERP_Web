@@ -1,0 +1,708 @@
+﻿@page "/PrNew"
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ConfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using ERP_Web.Models
+@using M = ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar  
+@using System.Text.Json;
+@using AntDesign.JsInterop
+@using System.Reflection.Metadata
+@using System.Text.RegularExpressions
+@inject IJSRuntime JS
+
+<div class="center">
+    <h3 class="center">新增采购申请单</h3>
+</div>
+
+<style>
+    .center {
+        margin: auto;
+        width: 50%;
+        padding: 10px;
+    }
+</style>
+@code{
+    Dictionary<string, int> gutter = new()
+    {
+        ["xs"] = 8,
+        ["sm"] = 16,
+        ["md"] = 24,
+        ["lg"] = 32,
+        ["xl"] = 48,
+        ["xxl"] = 64
+    };
+}
+<Form Model="@Pr"
+      OnFinish="OnFinish"
+      OnFinishFailed="OnFinishFailed"
+      LabelColSpan="0"
+      WrapperColSpan="20">
+    <GridRow Gutter=@gutter>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="代码">
+                <Input Disabled @bind-Value="Pr.Code" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="分类">
+                <Select TItem="M.PoTrxGroup"
+                        TItemValue="string"
+                        DataSource="@PoGrouplist"
+                        @bind-Value="Pr.PRTrxGroupCode"
+                        ValueName="@nameof(M.PoTrxGroup.Code)"
+                        LabelName="@nameof(M.PoTrxGroup.Name)"
+                        GroupName="@nameof(M.PoTrxGroup.Note)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Descending"
+                        OnSelectedItemChanged="PoTrxGroupChange"
+                        Style="width: 100%;">
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="日期">
+                <DatePicker @bind-Value="Pr.Date" Picker="@DatePickerType.Date" style="width: 180px" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="部门">
+                <Select TItem="M.Department"
+                        TItemValue="string"
+                        DataSource="@Depts"
+                        @bind-Value="Dept"
+                        ValueName="@nameof(M.Department.Name)"
+                        LabelName="@nameof(M.Department.Name)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        OnSelectedItemChanged="DeptChange"
+                        style="width: 180px">
+                </Select>
+            </FormItem>
+        </GridCol>
+
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="职员">
+                <Select TItem="M.Employee"
+                        TItemValue="string"
+                        DataSource="@Emps"
+                        @bind-Value="Emp"
+                        ValueName="@nameof(M.Employee.Code)"
+                        LabelName="@nameof(M.Employee.Name)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        OnSelectedItemChanged="EmpChange"
+                        style="width: 180px">
+                </Select>
+            </FormItem>
+        </GridCol>
+
+        <GridCol Class="gutter-row" Span="8">
+            <FormItem Label="摘要">
+                <Input @bind-Value="Pr.Explanation" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="数量">
+                <Input @bind-Value="@context.Quantity" style="width: 180px" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="金额">
+                <Input @bind-Value="@context.Amount" style="width: 180px" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="含税金额">
+                <Input @bind-Value="@context.AmountIncTax" style="width: 150px" />
+            </FormItem>
+        </GridCol>
+    </GridRow>
+</Form>
+    <button id="startBtn" class="">语音识别开启</button>
+    <button id="stopBtn" disabled>语音识别关闭</button>
+
+    <GridRow Align="RowAlign.Middle">
+        <GridCol Span="4">
+        <Select DataSource="@InvsBySp"
+                    Label="确认结果"
+                    @bind-Value="InvName"
+                    EnableSearch
+                    Width="200px"
+                    EnableVirtualization=true
+                    ValueName="@nameof(M.InventoryItem.Code)"
+                    LabelName="@nameof(M.InventoryItem.Name)"
+                    TItemValue="string"
+                    TItem="M.InventoryItem"
+                    Placeholder="@FinalRes"
+                    ShowArrowIcon="true"
+                    HideNotFoundContent="true"
+                    SearchDebounceMilliseconds="350"
+                    Loading="_loading"
+                    OnSearch="@(async (value) => await InvOnSearch(value))"
+                    OnSelectedItemChanged="OnSelectedItem">
+            </Select>
+        </GridCol>
+
+        <GridCol Span="4">
+            <Button OnClick="SpeechConfirmation">语音识别</Button>
+            <Tag Color="TagColor.Magenta">@FinalRes</Tag>
+        </GridCol>
+
+        <GridCol Span="4">
+            <Button OnClick="addRow" Type="ButtonType.Primary" Size="ButtonSize.Default">
+                插入行
+            </Button>
+
+            <Button OnClick="Submit" Type="@ButtonType.Primary" Size="ButtonSize.Default" HtmlType="submit">
+                提交保存
+            </Button>
+        </GridCol>
+    </GridRow>
+<p></p>
+
+<Modal Title="保存"
+       OnOk="@HandleOk"
+       OnCancel="@HandleCancel"
+       @bind-Visible="@Modal_visible">
+    <p>保存成功</p>
+</Modal>
+
+@code {
+    bool Modal_visible = false;
+    M.IcInv icInv;
+    M.InventoryItem Inv;
+    List<M.InventoryItem> Invs;
+    List<M.InventoryItem> InvsBySp;
+
+    List<M.IcInv> IcInvlist2;
+    string InvName;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+    IEnumerable<string> InvNames;
+
+    string TrxGroup;
+    string Dept;
+    string Emp;
+    string WareH;
+    string InvCodeEdit;
+    M.TrxGroup _selectedItem;
+    int RowKey;
+    int index;
+
+    List<M.PoTrxGroup> PoGrouplist;
+    List<M.Department> Depts;
+    List<M.Warehouse> Wares;
+    List<M.Employee> Emps;
+    List<M.IcPrice> IcPricelist;
+    List<M.IcPrice> IcPriceInsertlist;
+
+    public M.PurchaseRequisitions Pr = new M.PurchaseRequisitions()
+    {
+        Date = DateOnly.FromDateTime(DateTime.Now),
+        PRInvInOuts = new List<M.PRInvInOut>()
+    };
+
+
+
+    void SpeechConfirmation()
+    {
+        if (Pr.PRInvInOuts[index].InvCode is not null)
+        {
+            index++;
+            RowKey = index + 1;
+        }
+
+        if (FinalRes is not null)
+        {
+            Inv = Invs.Find(x => x.Name.Contains(FinalRes));
+           InvsBySp = Invs.Where(x => x.Name.Contains(FinalRes)).ToList();
+
+            if (Inv is not null)
+            {
+                Pr.PRInvInOuts[index].InventoryItem = Inv;
+                Pr.PRInvInOuts[index].InvCode = Inv.Code;
+                SqlClient SSC = new SqlClient();
+                RowKey = RowKey + 1;
+                index = index + 1;
+            }
+        }
+    }
+    private void OnSelectedItem(M.InventoryItem value)
+    {
+        if (value != null)
+        {
+            Inv = value;
+            if (Pr.PRInvInOuts[index].InvCode is null)
+            {
+                index--;
+                RowKey = index - 1;
+            }
+            // SqlClient SSC = new SqlClient();
+            // M.InventoryBalance inventoryBalance = SSC.Db.Queryable<M.InventoryBalance>().Where(xyz => xyz.WarehouseCode == Ic.WarehouseCode && xyz.InvCode == value.Code).First();
+            InvCodeEdit = value.Code;
+            Pr.PRInvInOuts[index].InventoryItem = value;
+            Pr.PRInvInOuts[index].InvCode = value.Code;
+
+        }
+
+    }
+
+    public class ApiResult
+    {
+        public List<string[]> result { get; set; }
+    }
+
+    M.InvTrx InvTrxRowSelected;
+
+    protected override void OnInitialized()
+    {
+        SqlClient SSC = new SqlClient();
+        // TrxGrouplist = SSC.Db.Queryable<M.TrxGroup>().ToList();
+        PoGrouplist = SSC.Db.Queryable<M.PoTrxGroup>().ToList();
+        Depts = SSC.Db.Queryable<Models.Department>().ToList();
+        Wares = SSC.Db.Queryable<Models.Warehouse>().ToList();
+        Invs = SSC.Db.Queryable<Models.InventoryItem>().ToList();
+        IcPricelist = SSC.Db.Queryable<Models.IcPrice>().ToList();
+        Emps = SSC.Db.Queryable<Models.Employee>().ToList();
+        for (int i = 1; i <= 10; i++)
+        {
+            Pr.PRInvInOuts.Add(new M.PRInvInOut() { InventoryItem = new M.InventoryItem() });
+        }
+    }
+
+    private void OnSelectedItemChangedHandler(M.InventoryItem value)
+    {
+        SqlClient SSC = new SqlClient();
+        M.InventoryBalance inventoryBalance = SSC.Db.Queryable<M.InventoryBalance>().Where(xyz => xyz.InvCode == value.Code).First();
+
+        if (value != null)
+        {
+            InvCodeEdit = value.Code;
+            foreach (M.PRInvInOut invTrx in Pr.PRInvInOuts.Where(M => M.InventoryItem.Code != "0" && M.InventoryItem.Name == value.Name))
+            {
+                invTrx.InventoryItem = value;
+                invTrx.InvCode = value.Code;
+            }
+        }
+
+        if (Pr.PRInvInOuts.Where(x => x.InvCode is null || x.InvCode == "0").Count() <= 2)
+        {
+            addRow();
+        }
+    }
+
+    private void OnSearch(string value)
+    {
+        Console.WriteLine($"search: {value}");
+    }
+
+    private void OnRowClick(RowData<M.PRInvInOut> value)
+    {
+        RowKey = value.RowIndex;
+        index = value.RowIndex - 1;
+        Console.WriteLine($"search: {RowKey}");
+    }
+
+    void PoTrxGroupChange(M.PoTrxGroup value)
+    {
+        // _selectedItem = value;
+        // Pr.TrxGroupCode = value?.Code;
+        // Pr.TrxGroup = value;
+        // Pr.TrxType = value.TrxType;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void WarehouseChange(M.Warehouse value)
+    {
+        // Pr.WarehouseCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void DeptChange(M.Department value)
+    {
+        Pr.DepartmentCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+
+    void EmpChange(M.Employee value)
+    {
+        Pr.EmployeeCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void InvChange(M.IcInv value)
+    {
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+
+    void QuantityChange(M.PRInvInOut invTrx)
+    {
+        // invTrx.QuantityChange();
+        // Pr.UpdateAmount();
+    }
+    void PriceChange(M.PRInvInOut invTrx)
+    {
+        // invTrx.PriceChange();
+        // Pr.UpdateAmount();
+    }
+
+    private void PriceIncTaxChange(M.PRInvInOut invTrx)
+    {
+        // invTrx.PriceIncTaxChange();
+        // Ic.UpdateAmount();
+    }
+
+    private void AmountChange(M.PRInvInOut invTrx)
+    {
+        // invTrx.AmountChange();
+        // Ic.UpdateAmount();
+    }
+
+    private void AmountIncTaxChange(M.PRInvInOut invTrx)
+    {
+        // invTrx.AmountInTaxChange();
+        // Ic.UpdateAmount();
+    }
+
+    private decimal IcPriceByInvCode(string Code)
+    {
+        decimal Price = 0M;
+
+        foreach (M.IcPrice IcPrice in IcPricelist.Where(x => x.InvCode == Code))
+        {
+            Price = IcPrice.Price;
+        }
+        return Price;
+    }
+
+    void addRow()
+    {
+        for (int i = 1; i <= 5; i++)
+        {
+            Pr.PRInvInOuts.Add(new M.PRInvInOut() { InvCode = "0", InventoryItem = new M.InventoryItem() });
+        }
+
+        Console.WriteLine($"Success:{JsonSerializer.Serialize("char")}");
+    }
+
+    private void Submit()
+    {
+        Pr.PRInvInOuts.RemoveAll(item => item.InvCode == null);
+        SqlClient SSC = new SqlClient();
+
+        Pr.UpdateInvPrice();
+        SSC.Db.InsertNav(Pr)
+            .Include(z1 => z1.PRInvInOuts)
+            .ExecuteCommand();
+        // M.InventoryBalance.UpdateBalance(Pr);
+        int res;
+        res = SSC.Db.Insertable(IcPriceInsertlist).ExecuteCommand();
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr)}");
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}");
+        Modal_visible = true;
+    }
+
+    private void HandleOk()
+    {
+        Pr.PRInvInOuts = new List<M.PRInvInOut>();
+    }
+
+    private void HandleCancel()
+    {
+        Modal_visible = false;
+    }
+
+    private void OnFinish(EditContext editContext)
+    {
+        Pr.Amount = 0;
+        foreach (M.PRInvInOut invTrx in Pr.PRInvInOuts)
+        {
+
+            // Pr.Amount += invTrx.Amount;
+            // Pr.AmountIncTax += invTrx.AmountIncTax;
+            // Pr.Quantity += invTrx.Quantity;
+            // M.IcPrice icPrice = new M.IcPrice { InvCode = invTrx.InvCode, Quantity = invTrx.Quantity, Price = invTrx.Price, Amount = invTrx.Amount };
+            // IcPriceInsertlist.Add(icPrice);
+        }
+        if (Pr.PRInvInOuts.Count() > 0)
+        {
+                // SqlClient SSC = new SqlClient();
+                // SSC.Db.InsertNav(Pr)
+                // .Include(z1 => z1.PRInvInOuts)
+                // .ExecuteCommand();
+                // int res;
+                // res = SSC.Db.Insertable(IcPriceInsertlist).ExecuteCommand();
+                Console.WriteLine($"Success:{JsonSerializer.Serialize(Pr)}");
+                Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}"); 
+        }
+        }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        Console.WriteLine($"Failed:{JsonSerializer.Serialize(Pr.Code)}");
+    }
+
+    Task<string> _oldTask;
+    bool _loading;
+
+    private async Task InvOnSearch(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (_oldTask == null || _oldTask.IsCompleted)
+            {
+                _loading = true;
+                StateHasChanged();
+            }
+        }
+        _loading = false;
+        StateHasChanged();
+    }
+
+    public string? FinalRes { get; set; }
+    public string? AllRes { get; set; }
+    public EventCallback<ChangeEventArgs> FinalResChanged { get; set; }
+
+    private void OnFinalResValueChanged(ChangeEventArgs e)
+    {
+        FinalRes = e.Value?.ToString();
+        InvName = null;
+    }
+
+    private void OnAllResValueChanged(ChangeEventArgs e)
+    {
+        AllRes = e.Value?.ToString();
+    }
+
+    private async Task SpeechReturn()
+    {
+        AllRes = new(await JS.InvokeAsync<string>("SpeechAllReturn"));
+        FinalRes = new(await JS.InvokeAsync<string>("SpeechFinalReturn"));
+        FinalRes = Regex.Replace(FinalRes, @"[\p{P}-[.]]", string.Empty);
+
+        Console.WriteLine($"结果: {FinalRes}");
+    }
+
+    void GetRes()
+    {
+        SpeechReturn().Wait();
+        speechToString(AllRes);
+    }
+
+    List<string> speechToString(string value)
+    {
+        List<string> res = new List<string>();
+        var json = JsonDocument.Parse(value).RootElement;
+        var json2 = json.GetProperty("paragraphs");
+
+        foreach (JsonElement je in json2.EnumerateArray())
+        {
+            var sentences = je.GetProperty("sentences")[1];
+            var finalTranscript = sentences.GetProperty("finalTranscript");
+            Console.WriteLine($"结果: {finalTranscript.GetString()}");
+            if (finalTranscript.GetString() is not null)
+                res.Add(finalTranscript.GetString());
+        }
+        return res;
+    }
+
+    private async Task Speechtest()
+    {
+        string result = "";
+        result = FinalRes;
+        var result2 = AllRes;
+    }
+}
+
+
+@if (Pr.PRInvInOuts.Count() < 1) { }
+    else
+    {
+        <Form Model="@Pr"
+        LabelColSpan="0"
+        WrapperColSpan="20">
+            <FormItem>
+                <Table DataSource="@Pr.PRInvInOuts" TItem="M.PRInvInOut" Context="row" Size="TableSize.Small"
+                ScrollX="1500px"
+                OnRowClick="@OnRowClick"
+                Resizable
+                HidePagination Bordered>
+                    <PropertyColumn Property="c => Pr.PRInvInOuts.IndexOf(c) + 1" Title=" " Fixed="ColumnFixPlacement.Left" Width="35"> </PropertyColumn>
+                    <PropertyColumn Property="c => c.InvCode" Title="存货" Width="120" Fixed="ColumnFixPlacement.Left">
+                        <Input @bind-Value="row.InvCode" />
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.InventoryItem.Name" Title="存货名称" Width="150" Fixed="ColumnFixPlacement.Left">
+                        <Select DataSource="@Invs"
+                        @bind-Value="row.InventoryItem.Name"
+                        EnableSearch
+                        EnableVirtualization=true
+                        ValueName="@nameof(M.InventoryItem.Name)"
+                        LabelName="@nameof(M.InventoryItem.Name)"
+                        TItemValue="string"
+                        TItem="M.InventoryItem"
+                        Placeholder="输入存货名称"
+                        ShowArrowIcon="true"
+                        HideNotFoundContent="true"
+                        SearchDebounceMilliseconds="350"
+                        Loading="_loading"
+                        OnSearch="@(async (value) => await InvOnSearch(value))"
+                        OnSelectedItemChanged="OnSelectedItemChangedHandler">
+                        </Select>
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.InventoryItem.Specification" Title="规格" Width="150" Ellipsis></PropertyColumn>
+                    <PropertyColumn Property="c => c.InventoryItem.Unit" Title="单位" Width="50" Align="ColumnAlign.Center" Ellipsis></PropertyColumn>
+                    <PropertyColumn Property="c => c.Quantity" Title="数量" Align="ColumnAlign.Right" Width="150">
+                        <AntDesign.InputNumber @bind-Value="row.Quantity" Precision="2" Min="0" Bordered="false" @bind-Value:after="() => QuantityChange(row)" Width="140px" />
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.Price" Title="单价" Align="ColumnAlign.Right" Width="150">
+                        <AntDesign.InputNumber @bind-Value="row.Price" Bordered="false" Precision="4" Min="0" AutoSize=1 @bind-Value:after="() => PriceChange(row)" Width="140px" />
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.Amount" Title="金额" Align="ColumnAlign.Right" Width="150">
+                        <AntDesign.InputNumber @bind-Value="row.Amount" Precision="4" Bordered="false" @bind-Value:after="() => PriceChange(row)" Width="140px" />
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.TaxRate" Title="税率" Align="ColumnAlign.Right" Width="80">
+                        <AntDesign.InputNumber Step=0.01M Min="0" Max="1" @bind-Value="row.TaxRate" Bordered="false" @bind-Value:after="() => PriceIncTaxChange(row)" Width="70" />
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.PriceIncTax" Title="含税单价" Align="ColumnAlign.Right" Width="150">
+                        <AntDesign.InputNumber @bind-Value="row.PriceIncTax" Precision="4" Bordered="false" @bind-Value:after="() => PriceIncTaxChange(row)" Width="140px" />
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.AmountIncTax" Title="含税金额" Align="ColumnAlign.Right" Width="200">
+                        <AntDesign.InputNumber @bind-Value="row.AmountIncTax" Precision="4" Bordered="false" @bind-Value:after="() => AmountIncTaxChange(row)" Width="190px" />
+                    </PropertyColumn>
+                    <PropertyColumn Property="c => c.Note" Title="备注" Align="ColumnAlign.Center" Ellipsis>
+                        <AntDesign.Input @bind-Value="row.Note" Bordered="false" />
+                    </PropertyColumn>
+                </Table>
+            </FormItem>
+        </Form>
+    }
+    <div id="myDiv" class="hidden">
+    <lib>抽取结果</lib>
+    <input id="FinalRes" value="@FinalRes" @onchange="OnFinalResValueChanged" />
+    <lib>全部结果</lib>
+    <input id="AllRes" type="text" value="@AllRes" @onchange="OnAllResValueChanged" />
+    <div id="transcript">
+        {
+        "paragraphs": []
+        }
+    </div>
+</div>
+
+<style>
+    .hidden {
+        display: none;
+    }
+
+    .visible {
+        display: block;
+    }
+</style>
+
+<script>
+    (function () {
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const transcriptDiv = document.getElementById('transcript');
+        const FinalRes = document.getElementById('FinalRes');
+        const AllResDiv = document.getElementById('AllRes');
+        let isRecognizing = false;
+        let recognition = null;
+        let speechContent = {
+            paragraphs: []
+        };
+        let currentParagraph = { sentences: [] };
+
+        window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+        if (!window.SpeechRecognition) {
+            alert("您的浏览器不支持语音识别。请使用最新版本的 Chrome 或 Edge。");
+            startBtn.disabled = true;
+            return;
+        }
+
+        recognition = new window.SpeechRecognition();
+        recognition.lang = 'zh-CN';
+        recognition.interimResults = true;
+        recognition.continuous = true;
+
+        recognition.onstart = () => {
+            console.log('语音识别已启动。');
+            isRecognizing = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+        };
+
+        recognition.onerror = (event) => {
+            console.error('语音识别错误:', event.error);
+            alert(`语音识别错误: ${event.error}`);
+            isRecognizing = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        };
+
+        recognition.onend = () => {
+            console.log('语音识别已结束。');
+            isRecognizing = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        };
+
+        recognition.onresult = (event) => {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                transcript = result[0].transcript.trim();
+                const isFinal = result.isFinal;
+                transcript = transcript.replace(/[`:_.~!#$%^&*() \+ =<>?"{}|, \/ ;' \\ [ \] ·~！#￥%……&*（）—— \+ ={}|《》？：“”【】、；‘’，。、]/g,'');
+
+                if (isFinal) {
+                    currentParagraph.sentences.push({ finalTranscript: transcript });
+                    speechContent.paragraphs.push(currentParagraph);
+                    currentParagraph = { sentences: [] };
+
+                    FinalRes.value = transcript;
+                    FinalRes.dispatchEvent(new Event('change'))
+                } else {
+                    if (currentParagraph.sentences.length === 0) {
+                        currentParagraph.sentences.push({ interimTranscript: transcript });
+                    } else {
+                        currentParagraph.sentences[currentParagraph.sentences.length - 1].interimTranscript = transcript;
+                    }
+                }
+            }
+            updateTranscript();
+        };
+
+        startBtn.addEventListener('click', () => {
+            if (recognition && !isRecognizing) {
+                recognition.start();
+                console.log('开始录音...');
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            if (recognition && isRecognizing) {
+                recognition.stop();
+                console.log('停止录音。');
+            }
+        });
+
+        function updateTranscript() {
+            transcriptDiv.textContent = JSON.stringify(speechContent, null, 2);
+            AllResDiv.value = JSON.stringify(speechContent, null, 2)
+            AllResDiv.dispatchEvent(new Event('change'))
+        }
+
+        updateTranscript();
+    })();
+
+    window.SpeechAllReturn = () => {
+      const AllRes = document.getElementById('AllRes');
+      return AllRes.value;
+    };
+    window.SpeechFinalReturn = () => {
+      const FinalRes = document.getElementById('FinalRes');
+      return FinalRes.value;
+    };
+</script>

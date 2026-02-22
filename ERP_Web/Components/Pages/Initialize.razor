@@ -1,0 +1,425 @@
+﻿@page "/initialize"
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+
+@* @rendermode InteractiveAuto *@
+@rendermode InteractiveServer
+
+<PageTitle>Initialize</PageTitle>
+
+<h1>Initialize</h1>
+
+<p></p>
+<Button class="btn btn-ButtonType.Primary" @onclick="InitDB">数据库全部初始化</Button>
+<Button class="btn btn-ButtonType.Primary" @onclick="InitTable">初始化单个表</Button>
+<Button class="btn btn-ButtonType.Primary" @onclick="AddMenuList">增加数据</Button>
+<Button class="btn btn-ButtonType.Primary" @onclick="UpdateSetting">初始化设置数据</Button>
+
+<Button Type="ButtonType.Primary">Hello World!</Button>
+<h3>Test  @mes</h3>
+
+@code {
+    private int currentCount = 0;
+    private List<Models.IcInv> ListOfIcInv;
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.Delay(500);
+        // ListOfIcInv = SSC.Db.Queryable<Models.IcInv>().ToList();
+    }
+
+    private string mes = "--";
+    private void InitDB()
+    {
+        SqlClient SSC = new SqlClient();
+        SSC.Db.CodeFirst.InitTables<Models.TrxGroup>();
+        SSC.Db.CodeFirst.InitTables<Models.InvTrx>();
+        SSC.Db.CodeFirst.InitTables<Models.Category>();
+        SSC.Db.CodeFirst.InitTables<Models.IcInvImage>();
+        SSC.Db.CodeFirst.InitTables<Models.Ic>();
+        SSC.Db.CodeFirst.InitTables<Models.IcPrice>();
+        SSC.Db.CodeFirst.InitTables<Models.IcInv>();
+        SSC.Db.CodeFirst.InitTables<Models.Warehouse>();
+        SSC.Db.CodeFirst.InitTables<Models.Department>();
+        SSC.Db.CodeFirst.InitTables<Models.Department>();
+        SSC.Db.CodeFirst.InitTables<Models.InventoryCostingMethod>();
+        SSC.Db.CodeFirst.InitTables<Models.InventoryBalance>();
+        SSC.Db.CodeFirst.InitTables<Models.InventoryCostingMethod>();
+        SSC.Db.CodeFirst.InitTables<Models.InventoryBalance>();
+        // SSC.Db.CodeFirst.InitTables<Models.InvUnitMapping>();
+        SSC.Db.CodeFirst.InitTables<Models.Unit>();
+        SSC.Db.CodeFirst.InitTables<Models.InventoryUnit>();
+        SSC.Db.CodeFirst.InitTables<Models.Stocktake>();
+        SSC.Db.CodeFirst.InitTables<Models.StocktakeDetail>();
+        SSC.Db.CodeFirst.InitTables<Models.User>();
+        SSC.Db.CodeFirst.InitTables<Models.MenuList>();
+        SSC.Db.CodeFirst.InitTables<Models.PoTrxGroup>();
+
+        
+        SSC.Db.CodeFirst.InitTables<Models.InventoryItem>();
+        SSC.Db.CodeFirst.InitTables<Models.PoTrxGroup>();
+        SSC.Db.CodeFirst.InitTables<Models.ShoppingCart>();
+
+        SSC.Db.CodeFirst.InitTables<Models.PoTrxGroup>();
+        SSC.Db.CodeFirst.InitTables<Models.PoTrxType>();
+        SSC.Db.CodeFirst.InitTables<Models.PRInvInOut>();
+        SSC.Db.CodeFirst.InitTables<Models.PurchaseRequisitions>();
+        SSC.Db.CodeFirst.InitTables<Models.POInvInOut>();
+        SSC.Db.CodeFirst.InitTables<Models.PurchaseOrder>();
+
+
+
+        mes = "初始化数据库成功";
+    }
+    private void InitTable()
+    {
+        SqlClient SSC = new SqlClient();
+        SSC.Db.CodeFirst.InitTables<Models.User>();
+        SSC.Db.CodeFirst.InitTables<Models.MenuList>();
+
+
+        SSC.Db.CodeFirst.InitTables<Models.InventoryItem>();
+        SSC.Db.CodeFirst.InitTables<Models.PoTrxGroup>();
+        SSC.Db.CodeFirst.InitTables<Models.ShoppingCart>();
+
+        SSC.Db.CodeFirst.InitTables<Models.PoTrxGroup>();
+        SSC.Db.CodeFirst.InitTables<Models.PRInvInOut>();
+        SSC.Db.CodeFirst.InitTables<Models.PurchaseRequisitions>();
+        SSC.Db.CodeFirst.InitTables<Models.POInvInOut>();
+        SSC.Db.CodeFirst.InitTables<Models.PurchaseOrder>();
+
+
+        mes = "单个表初始化成功";
+    }
+    //增加数据
+    private void AddMenuList()
+    {
+        List<MenuList> menus = new List<MenuList> {
+                new MenuList
+                {
+                    Code = "Home",
+                    Path = "/",
+                    Name = "Home",
+                    Key = "home",
+                    Icon = "home",
+                    ParentId = 0
+
+                },
+                new MenuList
+                {
+                    Code = "采购",
+                    Path = "/PrNew",
+                    Name = "采购",
+                    Key = "PurchaseRequisitions",
+                    Icon = "menu-unfold",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "新建采购单",
+                            Path = "/PrNew",
+                            Name = "新建采购单",
+                            Key = "Pr.New",
+                            Icon = "plus-square"
+                        },
+                        new MenuList{
+                            Code = "采购记录",
+                            Path = "/inventory_records",
+                            Name = "库存记录",
+                            Key = "inventory_records",
+                            Icon = "unordered-list"
+                        }
+                    ]
+                },
+                new MenuList
+                {
+                    Code = "库存",
+                    Path = "/icadd",
+                    Name = "库存",
+                    Key = "IcAdd",
+                    Icon = "menu-unfold",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "库存收发",
+                            Path = "/icadd",
+                            Name = "库存收发",
+                            Key = "icadd.icadd",
+                            Icon = "plus-square"
+                        },
+                        new MenuList{
+                            Code = "库存记录",
+                            Path = "/inventory_records",
+                            Name = "库存记录",
+                            Key = "inventory_records",
+                            Icon = "unordered-list"
+                        },
+                        new MenuList{
+                            Code = "库存结余",
+                            Path = "/inventory-balance",
+                            Name = "库存结余",
+                            Key = "inventory-balance",
+                            Icon = "menu-unfold"
+                        },
+                        new MenuList{
+                            Code = "库存盘点",
+                            Path = "/inventory-stocktake",
+                            Name = "库存盘点",
+                            Key = "inventory-stocktake",
+                            Icon = "menu-unfold",
+                            HideChildrenInMenu = true
+                        }
+                    ]
+                },
+                new MenuList
+                {
+                    Code = "Counter",
+                    Path = "/counter",
+                    Name = "Counter",
+                    Key = "counter",
+                    Icon = "menu-unfold",
+                    ParentId = 0
+                },
+                new MenuList
+                {
+                    Code = "设置",
+                    Path = "/initialize",
+                    Name = "设置",
+                    Key = "setting",
+                    Icon = "setting",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "初始化",
+                            Path = "/initialize",
+                            Name = "初始化",
+                            Key = "initialize",
+                            Icon = "setting"
+                        },
+                        new MenuList{
+                            Code = "存货分类",
+                            Path = "/category",
+                            Name = "存货分类",
+                            Key = "category",
+                            Icon = "folder"
+                        },
+                        new MenuList{
+                            Code = "存货档案",
+                            Path = "/invlist",
+                            Name = "存货档案",
+                            Key = "invlist",
+                            Icon = "folder"
+                        },
+                        new MenuList{
+                            Code = "仓库档案",
+                            Path = "/warehouse",
+                            Name = "仓库档案",
+                            Key = "warehouse",
+                            Icon = "folder"
+                        }
+                    ]
+                }
+            };
+        SqlClient SSC = new SqlClient();
+        SSC.Db.InsertNav(menus).Include(it => it.Children).ExecuteCommand();
+        mes = "添加数据成功";
+    }
+
+
+    //全部数据
+    private void UpdateSetting()
+    {
+        SqlClient SSC = new SqlClient();
+
+        List<Models.TrxGroup> TrxGroups = new List<Models.TrxGroup>()
+            {
+                new Models.TrxGroup() { Code = "I01", Name = "期初入库", TrxType = 1 },
+                new Models.TrxGroup() { Code = "I02", Name = "采购入库", TrxType = 1 },
+                new Models.TrxGroup() { Code = "I03", Name = "盘盈入库", TrxType = 1 },
+                new Models.TrxGroup() { Code = "I09", Name = "其他入库", TrxType = 1 },
+                new Models.TrxGroup() { Code = "O01", Name = "销售出库", TrxType = -1 },
+                new Models.TrxGroup() { Code = "O02", Name = "领料出库", TrxType = -1 },
+                new Models.TrxGroup() { Code = "O03", Name = "盘亏出库", TrxType = -1 },
+                new Models.TrxGroup() { Code = "O04", Name = "其他出库", TrxType = -1 },
+                new Models.TrxGroup() { Code = "Z01", Name = "直入直出", TrxType = 0 }
+            };
+        SSC.Db.Insertable(TrxGroups).ExecuteCommand();
+
+        List<Models.Category> Categorys = new List<Models.Category>()
+        {
+            new Models.Category(){Code = "00",Name = "未知分类" },
+            new Models.Category(){Code = "01",Name = "新鲜蔬菜" },
+            new Models.Category(){Code = "02",Name = "新鲜水果" },
+            new Models.Category(){Code = "03",Name = "新鲜肉类" },
+            new Models.Category(){Code = "04",Name = "新鲜水产" },
+            new Models.Category(){Code = "05",Name = "禽蛋类" },
+            new Models.Category(){Code = "06",Name = "冻品类" },
+            new Models.Category(){Code = "07",Name = "干货" },
+            new Models.Category(){Code = "08",Name = "酒水饮料" },
+            new Models.Category(){Code = "09",Name = "烟草类" },
+            new Models.Category(){Code = "99",Name = "其他" }
+
+        };
+        SSC.Db.Insertable(Categorys).ExecuteCommand();
+
+        List<Models.Warehouse> Warehouses = new List<Warehouse>()
+        {
+            new Warehouse(){Code = "Z01", Name = "总仓" },
+            new Warehouse(){Code = "K01", Name = "客房" },
+            new Warehouse(){Code = "C01", Name = "餐饮" }
+        };
+        SSC.Db.Insertable(Warehouses).ExecuteCommand();
+
+        List<Models.Department> Departments = new List<Department>()
+        {
+            new Models.Department(){Code = "01",Name = "综合部" },
+            new Models.Department(){Code = "02",Name = "财务" },
+            new Models.Department(){Code = "0201",Name = "财务",Superior = "02"},
+            new Models.Department(){Code = "0202",Name = "采购" },
+            new Models.Department(){Code = "0203",Name = "库管" },
+            new Models.Department(){Code = "03",Name = "客房" },
+            new Models.Department(){Code = "99",Name = "其他" }
+        };
+        SSC.Db.Insertable(Departments).ExecuteCommand();
+
+        List<Models.InventoryCostingMethod> InventoryCostingMethods = SSC.Db.Queryable<Models.InventoryCostingMethod>().ToList();
+        if (InventoryCostingMethods.Count == 0)
+        {
+            InventoryCostingMethods = new List<InventoryCostingMethod>()
+            {
+                new Models.InventoryCostingMethod(){Code = "FIFO",Name = "先进先出法",Note = "First-in, first-out" },
+                new Models.InventoryCostingMethod(){Code = "LIFO",Name = "后进先出法",Note = "Lost-in, first-out" },
+                new Models.InventoryCostingMethod(){Code = "MA",Name = "移动平均法",Note = "Moving average"},
+                new Models.InventoryCostingMethod(){Code = "WA",Name = "加权平均法",Note = "Weighted average"}
+            };
+            SSC.Db.Insertable(InventoryCostingMethods).ExecuteCommand();
+        }
+        List<MenuList> menus = new List<MenuList> {
+                new MenuList
+                {
+                    Code = "Home",
+                    Path = "/",
+                    Name = "Home",
+                    Key = "home",
+                    Icon = "home",
+                    ParentId = 0
+
+                },
+                new MenuList
+                {
+                    Code = "采购",
+                    Path = "/PrNew",
+                    Name = "采购",
+                    Key = "PurchaseRequisitions",
+                    Icon = "menu-unfold",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "新建采购单",
+                            Path = "/PrNew",
+                            Name = "库存收发",
+                            Key = "Pr.New",
+                            Icon = "plus-square"
+                        },
+                        new MenuList{
+                            Code = "采购记录",
+                            Path = "/inventory_records",
+                            Name = "库存记录",
+                            Key = "inventory_records",
+                            Icon = "unordered-list"
+                        }
+                    ]
+                },
+                new MenuList
+                {
+                    Code = "库存",
+                    Path = "/icadd",
+                    Name = "库存",
+                    Key = "IcAdd",
+                    Icon = "menu-unfold",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "库存收发",
+                            Path = "/icadd",
+                            Name = "库存收发",
+                            Key = "icadd.icadd",
+                            Icon = "plus-square"
+                        },
+                        new MenuList{
+                            Code = "库存记录",
+                            Path = "/inventory_records",
+                            Name = "库存记录",
+                            Key = "inventory_records",
+                            Icon = "unordered-list"
+                        },
+                        new MenuList{
+                            Code = "库存结余",
+                            Path = "/inventory-balance",
+                            Name = "库存结余",
+                            Key = "inventory-balance",
+                            Icon = "menu-unfold"
+                        },
+                        new MenuList{
+                            Code = "库存盘点",
+                            Path = "/inventory-stocktake",
+                            Name = "库存盘点",
+                            Key = "inventory-stocktake",
+                            Icon = "menu-unfold",
+                            HideChildrenInMenu = true
+                        }
+                    ]
+                },
+                new MenuList
+                {
+                    Code = "Counter",
+                    Path = "/counter",
+                    Name = "Counter",
+                    Key = "counter",
+                    Icon = "menu-unfold",
+                    ParentId = 0
+                },
+                new MenuList
+                {
+                    Code = "设置",
+                    Path = "/initialize",
+                    Name = "设置",
+                    Key = "setting",
+                    Icon = "setting",
+                    ParentId = 0,
+                    Children = [
+                        new MenuList{
+                            Code = "初始化",
+                            Path = "/initialize",
+                            Name = "初始化",
+                            Key = "initialize",
+                            Icon = "setting"
+                        },
+                        new MenuList{
+                            Code = "存货分类",
+                            Path = "/category",
+                            Name = "存货分类",
+                            Key = "category",
+                            Icon = "folder"
+                        },
+                        new MenuList{
+                            Code = "存货档案",
+                            Path = "/invlist",
+                            Name = "存货档案",
+                            Key = "invlist",
+                            Icon = "folder"
+                        },
+                        new MenuList{
+                            Code = "仓库档案",
+                            Path = "/warehouse",
+                            Name = "仓库档案",
+                            Key = "warehouse",
+                            Icon = "folder"
+                        }
+                    ]
+                }
+            };
+        SSC.Db.InsertNav(menus).Include(it => it.Children).ExecuteCommand();
+        mes = "添加数据成功";
+    }
+}

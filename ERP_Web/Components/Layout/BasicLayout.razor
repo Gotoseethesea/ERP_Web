@@ -1,0 +1,242 @@
+﻿@using AntDesign
+@using AntDesign.ProLayout
+@using ERP_Web.Repository
+@using System.Text.Json
+@* @rendermode InteractiveServer *@
+
+@inherits LayoutComponentBase
+
+<AntDesign.ProLayout.BasicLayout 
+    Logo="@("https://gw.alipayobjects.com/zos/rmsportal/KDpgvguMpGfqaHPjicRK.svg")"
+    MenuData="_menuData"
+    NavTheme="AntDesign.MenuTheme.Dark"
+    Title = "ERP_Web"
+    MenuAccordion
+    @bind-Collapsed="collapsed">
+    <HeaderContentRender>
+        <Space Size="@("24")">
+            <SpaceItem>
+                <Icon Class="action" Type="@(collapsed ? "menu-unfold" : "menu-fold")" OnClick="Toggle" />
+            </SpaceItem>
+            <SpaceItem>
+                <Icon Class="action" Type="reload" Theme="IconThemeType.Outline" OnClick="Reload" />
+            </SpaceItem>
+            <SpaceItem>
+                <Button Type="ButtonType.Link" Size="ButtonSize.Large">星陨阁</Button>
+            </SpaceItem>
+        </Space>
+    </HeaderContentRender>
+    <RightContentRender >
+        <RightContent />
+    </RightContentRender>
+    <ChildContent>
+        <ReuseTabs> </ReuseTabs>
+        @if (_isLoaded) {
+            @Body
+        } else {
+            <Spin Tip="首次加载中..." Size="SpinSize.Small"></Spin> <!-- Ant Design 加载动画 -->
+        }
+    </ChildContent>
+    <FooterRender>
+        <FooterView Copyright="2026 Ant Design Blazor For ERP Web" Links="Links"></FooterView>
+    </FooterRender>
+</AntDesign.ProLayout.BasicLayout>
+
+<SettingDrawer @rendermode="InteractiveServer"/>
+
+@code{
+    bool collapsed;
+    private bool _isLoaded = false;
+
+    private MenuDataItem[] _menuData;
+
+    protected override async Task OnInitializedAsync()
+    {
+        SnowFlakeSingle.WorkId = 24;//唯一数字;
+        // _menuData = new[] {
+        //         new MenuDataItem
+        //         {
+        //             // authority = "admin",
+        //             Path = "/",
+        //             Name = "Home",
+        //             Key = "home",
+        //             Icon = "home",
+        //         },
+        //         new MenuDataItem
+        //         {
+        //             Path = "/icadd",
+        //             Name = "库存",
+        //             Key = "IcAdd",
+        //             Icon = "menu-unfold",
+        //             Children = [
+        //                 new MenuDataItem{
+        //                     Path = "/icadd",
+        //                     Name = "库存收发",
+        //                     Key = "icadd.icadd",
+        //                     Icon = "plus-square"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/inventory_records",
+        //                     Name = "库存记录",
+        //                     Key = "inventory_records",
+        //                     Icon = "unordered-list"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/inventory-balance",
+        //                     Name = "库存结余",
+        //                     Key = "inventory-balance",
+        //                     Icon = "menu-unfold"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/inventory-stocktake",
+        //                     Name = "库存盘点",
+        //                     Key = "inventory-stocktake",
+        //                     Icon = "menu-unfold",
+        //                     HideChildrenInMenu = true
+        //                 }
+        //             ]
+        //         },
+        //         new MenuDataItem
+        //         {
+        //             Path = "/counter",
+        //             Name = "Counter",
+        //             Key = "counter",
+        //             Icon = "menu-unfold",
+        //         },
+        //         new MenuDataItem
+        //         {
+        //             Path = "/initialize",
+        //             Name = "设置",
+        //             Key = "setting",
+        //             Icon = "setting",
+        //             Children = [
+        //                 new MenuDataItem{
+
+        //                     Path = "/initialize",
+        //                     Name = "初始化",
+        //                     Key = "initialize",
+        //                     Icon = "setting"
+        //                 },
+        //                 new MenuDataItem{
+
+        //                     Path = "/category",
+        //                     Name = "存货分类",
+        //                     Key = "category",
+        //                     Icon = "folder"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/invlist",
+        //                     Name = "存货档案",
+        //                     Key = "invlist",
+        //                     Icon = "folder"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/warehouse",
+        //                     Name = "仓库档案",
+        //                     Key = "warehouse",
+        //                     Icon = "folder"
+        //                 }
+        //             ]
+        //         }
+        //     };
+
+        SqlClient SSC = new SqlClient();
+        List<Models.MenuList> menuData = SSC.Db.Queryable<Models.MenuList>()
+            .IncludesAllFirstLayer()
+            .Where(xx=>xx.Active == true && (xx.ParentId == null || xx.ParentId == 0)).ToList();
+        _menuData = CreateMenu(menuData);
+
+
+        // Console.WriteLine($"Success:{JsonSerializer.Serialize(_menuData2)}");
+
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(_menuData)}");
+    }
+
+    MenuDataItem[] CreateMenu(List<Models.MenuList> menuData)
+    {
+        MenuDataItem[] menuDataRes = new MenuDataItem[menuData.Count];
+        int i = 0;
+        foreach (var item in menuData)
+        {
+
+            MenuDataItem menuItem = new MenuDataItem
+            {
+                Path = item.Path,
+                Name = item.Name,
+                Key = item.Key,
+                Icon = item.Icon,
+                // ParentKeys = item.ParentKeys
+            };
+            if (item.Children != null && item.Children.Count > 0)
+            {
+                menuItem.Children = new MenuDataItem[]{};
+                // CreateMenu(item.Children);
+                menuItem.Children = CreateMenu(item.Children);
+            }
+            if (item.HideChildrenInMenu)
+            {
+                menuItem.HideChildrenInMenu = item.HideChildrenInMenu;
+            }
+            if (item.HideInMenu)
+            {
+                menuItem.HideInMenu = item.HideInMenu;
+            }
+
+            menuDataRes[i] = menuItem;
+            i++;
+        }
+        return menuDataRes;
+    }
+
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+        if (firstRender) {
+            await Task.Delay(200); // 确保资源加载
+            _isLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    public LinkItem[] Links =
+    {
+            new LinkItem
+            {
+                Key = "Ant Design Blazor",
+                Title = "Ant Design Blazor",
+                Href = "https://antblazor.com",
+                BlankTarget = true,
+            },
+            new LinkItem
+            {
+                Key = "github",
+                Title = (RenderFragment)(@<Icon Type="github" />),
+                Href = "https://github.com/ant-design-blazor/ant-design-pro-blazor",
+                BlankTarget = true,
+            },
+            new LinkItem
+            {
+                Key = "Blazor",
+                Title = "Blazor",
+                Href = "https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor?WT.mc_id=DT-MVP-5003987",
+                BlankTarget = true,
+            }
+    };
+
+    void Toggle()
+    {
+        collapsed = !collapsed;
+    }
+
+
+    // void Reload()
+    // {
+    //     collapsed = !collapsed;
+    // }
+    [Inject] private ReuseTabsService TabService { get; set; }
+
+    void Reload()
+    {
+        TabService.ReloadPage();
+    }
+}

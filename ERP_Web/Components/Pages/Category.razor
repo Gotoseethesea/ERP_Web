@@ -1,0 +1,80 @@
+﻿@page "/category"
+@rendermode InteractiveServer
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using M = ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+@using System.Text.Json;
+
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+
+<link href="_content/AntDesign/css/ant-design-blazor.css" rel="stylesheet"> <!-- 自动引入到这里 -->
+<link antblazor-css />
+
+<script src="_content/AntDesign/js/ant-design-blazor.js"></script> <!-- 自动引入到这里 -->
+<script antblazor-js></script>
+
+<h1>存货分类</h1>
+<div>
+    <Table DataSource="imockDb" RowClassName="@(_=>"editable-row")" Bordered PageSize="10"
+           @bind-SelectedRows="i_selectedRows">
+        <Selection />
+        <PropertyColumn Width="10px" Property="c=>c.Code" Sortable DefaultSortOrder="@SortDirection.Ascending"></PropertyColumn>
+        <PropertyColumn Width="15%" Property="c=>c.Name" Sortable></PropertyColumn>
+        <PropertyColumn Property="c=>c.Name">  </PropertyColumn>
+        <ActionColumn Title="Action">
+            <Popconfirm Title="Sure to delete?"
+                        OnConfirm="()=> DeleteById(context.Id)"
+                        OkText="Yes"
+                        CancelText="No">
+                <a>Delete</a>
+            </Popconfirm>
+        </ActionColumn>
+    </Table>
+</div>
+
+<style>
+    .editable-cell {
+        position: relative;
+    }
+
+    .editable-cell-value-wrap {
+        padding: 5px 12px;
+        cursor: pointer;
+    }
+
+    .editable-row:hover .editable-cell-value-wrap {
+        padding: 4px 11px;
+        border: 1px solid #d9d9d9;
+        border-radius: 4px;
+    }
+
+    [data-theme='dark'] .editable-row:hover .editable-cell-value-wrap {
+        border: 1px solid #434343;
+    }
+</style>
+
+@code {
+    CategoryRepository CategoryRepository = new CategoryRepository();
+
+    List<M.Category> imockDb = new();
+    IEnumerable<M.Category> i_selectedRows = [];
+
+    protected override void OnInitialized()
+    {
+        imockDb = CategoryRepository.GetList();
+    }
+
+    //int ieditId;
+
+    void DeleteById(int id)
+    {
+        CategoryRepository.Delete(id);
+        imockDb = CategoryRepository.GetList();
+    }
+
+}

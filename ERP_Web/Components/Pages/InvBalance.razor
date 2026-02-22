@@ -1,0 +1,340 @@
+﻿@page "/inventory-balance"
+
+<h3>InvBalance</h3>
+@rendermode InteractiveServer
+@using System.ComponentModel
+@using AntDesign.TableModels
+@using AntDesign.Core.Extensions
+@using ERP_Web.Repository
+@using M = ERP_Web.Models
+@using Newtonsoft.Json
+@using SqlSugar
+
+<label>年度</label>
+<Select Mode="SelectMode.Multiple"
+        Placeholder="Please select"
+        @bind-Values="@YearSelected"
+        TItemValue="string"
+        TItem="string"
+        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+        Style="width: 20%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+    <SelectOptions>
+        @foreach (var item in YearSe)
+        {
+            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+        }
+    </SelectOptions>
+</Select>
+<label>月份</label>
+<Select Mode="SelectMode.Multiple"
+
+        Placeholder="Please select"
+        @bind-Values="@MonthSelected"
+        TItemValue="string"
+        TItem="string"
+        title="月份"
+        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+        Style="width: 20%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+    <SelectOptions>
+        @foreach (var item in MonthSe)
+        {
+            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+        }
+    </SelectOptions>
+</Select>
+
+<label>仓库</label>
+<Select Mode="SelectMode.Multiple"
+        TItem="M.Warehouse"
+        TItemValue="string"
+        DataSource="@Warehouselist"
+        @bind-Values="@WarehSelected"
+        OnSelectedItemChanged="WarehouseChange"
+        ValueName="@nameof(M.Warehouse.Code)"
+        LabelName="@nameof(M.Warehouse.Name)" 
+        title="仓库"
+        Style="width: 25%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+</Select>
+
+<Button OnClick="Refresh" Type="@ButtonType.Primary" Size="ButtonSize.Small" HtmlType="submit">
+    搜索
+</Button>
+<Button OnClick="InvBalanceUpdate" Type="@ButtonType.Primary" Size="ButtonSize.Small" HtmlType="submit">
+    重新生成
+</Button>
+@code
+{
+    List<string> MonthSe, YearSe;
+    IEnumerable<string> MonthSelected, YearSelected, WarehSelected;  //选择的月份和年度、仓库
+    List<M.Warehouse> Warehouselist;
+    string WareH = "WH001";
+
+    public void WarehouseChange(M.Warehouse values)
+    {
+        if (values != null)
+            Console.WriteLine($"selected: ${string.Join(",", values)}");
+    }
+    void SelectOnIn()
+    {
+        const int min = 1;
+        const int max = 12;
+        MonthSe = new List<string>();   //月份选项
+        YearSe = new List<string>();    //年度选项
+
+        for (var i = min; max >= i; i++)
+        {
+            var value = Convert.ToString(i);
+            var value2 = Convert.ToString(2022 + i);
+            MonthSe.Add(value);
+            YearSe.Add(value2);
+        }
+
+        if (YearSelected == null || YearSelected.Count() == 0)
+        {
+            string year = DateTime.Now.Year.ToString();
+            YearSelected = new List<string>() { year };
+        }
+        // Console.WriteLine($"selected: ${string.Join(",")}");
+
+        //       if(WarehSelected == null || WarehSelected.Count() ==0)
+        //       {
+        //           WarehSelected = new List<string>() { WareH };
+        // }
+    }
+
+    private void OnSelectedItemsChangedHandler(IEnumerable<string> values)
+    {
+        if (values != null)
+            Console.WriteLine($"selected: ${string.Join(",", values)}");
+    }
+    public List<IConditionalModel> conModels;
+    public void ConModelsRefresh()
+    {
+        conModels = new List<IConditionalModel>();
+        var ConMon = new ConditionalCollections();  //       Condition condition = new Condition
+        var ConMonList = new List<KeyValuePair<WhereType, SqlSugar.ConditionalModel>>();
+
+        foreach (var Year in YearSelected)
+        {
+            var con = new ConditionalModel()
+            {
+                ConditionalType = ConditionalType.Equal, //IN
+                FieldName = "FiscalYear",
+                FieldValue = Year,
+                CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+            };
+            // conModels.Add(con);
+        }
+
+        if (MonthSelected != null)
+        {
+            int i = 1;
+            foreach (var Mon in MonthSelected)
+            {
+                var conM = new ConditionalModel();
+                KeyValuePair<WhereType, SqlSugar.ConditionalModel> conKey;
+                if (i == 1)
+                {
+                    conKey = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.And,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "Period",
+                        FieldValue = Mon,
+                        CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+                    });
+                    i++;
+                }
+                else
+                {
+                    conKey = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.Or,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "Period",
+                        FieldValue = Mon,
+                        CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+                    });
+                }
+                // ConMonList.Add(conKey);
+            }
+        }
+
+        if (WarehSelected != null)
+        {
+            int j = 1;
+            foreach (var Wareh in WarehSelected)
+            {
+                var conW = new ConditionalModel();
+                KeyValuePair<WhereType, SqlSugar.ConditionalModel> conKeyW;
+                if (j == 1)
+                {
+                    conKeyW = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.And,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "WarehouseCode",
+                        FieldValue = Wareh,
+                        CSharpTypeName = "string" //设置类型 和C#名称一样常用的支持
+                    });
+                    j++;
+                }
+                else
+                {
+                    conKeyW = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.Or,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "WarehouseCode",
+                        FieldValue = Wareh,
+                        CSharpTypeName = "string" //设置类型 和C#名称一样常用的支持
+                    });
+                }
+                ConMonList.Add(conKeyW);
+            }
+        }
+        ConMon.ConditionalList = ConMonList;
+        conModels.Add(ConMon);
+    }
+
+    public void Refresh()
+    {
+        ConModelsRefresh();
+        SqlClient SSC = new SqlClient();
+        data = SSC.Db.Queryable<M.InventoryBalance>()
+            .IncludesAllFirstLayer()
+            .Where(conModels).ToList();
+
+        _table.ResetData();
+    }
+
+    public void InvBalanceUpdate()
+    {
+        ConModelsRefresh();
+        SqlClient SSC = new SqlClient();
+        List<M.InventoryBalance> inventoryBalances;
+        string FiscalYear = "2025", Period = "1"; WarehCode = "Z01";
+        List<M.InvTrx> invTrxes = SSC.Db.Queryable<M.InvTrx>()
+            .IncludesAllFirstLayer()
+            .Where(conModels).ToList();
+
+        List<M.Ic> ics = SSC.Db.Queryable<M.Ic>()
+            .IncludesAllFirstLayer()
+            //.Where(xx =>/*xx.FiscalYear == int.Parse(FiscalYear) && xx.Period == int.Parse(Period) &&  */xx.WarehouseCode == WarehCode)
+            .ToList();
+        if (ics == null) return;
+
+        M.InventoryBalance.UpdateBalance(ics);
+
+        data = SSC.Db.Queryable<M.InventoryBalance>()
+            .IncludesAllFirstLayer()
+            .Where(conModels).ToList();
+
+        _table.ResetData();
+    }
+}
+
+<Table TItem="M.InventoryBalance" DataSource="@data" AutoColIndexes="false" @ref="_table" PageSize="50"
+       ScrollY="800"
+       ScrollBarWidth ="10"
+       EnableVirtualization>
+    <PropertyColumn Property="c => c.WarehouseCode" Title="仓库代码" Sortable >
+        <a>@context.WarehouseCode</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Warehouse.Name" Title="仓库名称" Sortable >
+        <a>@context.Warehouse.Name</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.InvCode" Title="存货代码" Sortable >
+        <a>@context.InvCode</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Inv.Name" Title="名称" Sortable >
+        <a>@context.Inv.Name</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Inv.Specification" Title="规格" Sortable>
+        <a>@context.Inv.Specification</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Inv.Unit" Title="单位" Sortable>
+        <a>@context.Inv.Unit</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Quantity" Title="数量" Sortable>
+        <a>@context.Quantity</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Price" Title="单价" Sortable>
+        <a>@context.Price</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Amount" Title="金额" Sortable>
+        <a>@context.Amount</a>
+    </PropertyColumn>
+    <PropertyColumn Property="c => c.Note" Title="备注"Sortable>
+        <a>@context.Note</a>
+    </PropertyColumn>
+
+    <ActionColumn ColIndex="4" Title="Action">
+        <Space Size=@("middle")>
+            <SpaceItem>
+                <a>Invite @context.Id</a>
+            </SpaceItem>
+            <SpaceItem>
+                <a>Delete</a>
+            </SpaceItem>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    public string WarehCode = "WH001";
+    public string InvCode = "INV001";
+    public Table<M.InventoryBalance> _table;
+    public List<M.InventoryBalance> data = new List<M.InventoryBalance>();
+
+    protected override void OnInitialized()
+    {
+        SelectOnIn();
+        ConModelsRefresh();
+        SqlClient SSC = new SqlClient();
+        data = SSC.Db.Queryable<M.InventoryBalance>()
+        .IncludesAllFirstLayer()
+        .ToList();
+        Warehouselist = SSC.Db.Queryable<M.Warehouse>().Where(x=>x.Active == true).ToList();
+    }
+
+    /// <summary>
+    /// An Action to defined each column
+    /// </summary>
+    /// <param name="propertyName">The name of the property binding the column. </param>
+    /// <param name="column">The column instance, you need to explicitly cast to a concrete Column type. </param>
+    void definitions(string propertyName, IFieldColumn column)
+    {
+        if (propertyName == "Tags")
+        {
+            var tagCol = ((Column<string[]>)column);
+
+            tagCol.CellRender = cellData =>
+            @<span>
+            @foreach (var tag in cellData.FieldValue)
+            {
+                var color = tag.Length > 5 ? TagColor.GeekBlue : TagColor.Green;
+                if (tag == "loser")
+                {
+                    color = TagColor.Volcano;
+                }
+                    <Tag Color="@color">@tag</Tag>
+            }
+            </span>;
+            return;
+        }
+
+        column.Sortable = true;
+        column.Filterable = true;
+    }
+}

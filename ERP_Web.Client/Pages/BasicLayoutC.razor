@@ -1,0 +1,113 @@
+﻿@using AntDesign
+@using AntDesign.ProLayout
+
+@inherits LayoutComponentBase
+
+<AntDesign.ProLayout.BasicLayout 
+    Logo="@("https://gw.alipayobjects.com/zos/rmsportal/KDpgvguMpGfqaHPjicRK.svg")"
+    MenuData="_menuData"
+    Title = "ERP_Web"
+    MenuAccordion
+    @bind-Collapsed="collapsed">
+    <HeaderContentRender>
+        <Space Size="@("24")">
+            <SpaceItem>
+                <Icon Class="action" Type="@(collapsed?"menu-unfold":"menu-fold")" OnClick="Toggle" />
+            </SpaceItem>
+            <SpaceItem>
+                <Icon Class="action" Type="reload" Theme="IconThemeType.Outline" OnClick="Reload" />
+            </SpaceItem>
+        </Space>
+    </HeaderContentRender>
+    <RightContentRender>
+        @*//#if (full)*@
+        <BlazorWEB.RightContent />
+        @*//#endif*@
+    </RightContentRender>
+    <ChildContent>
+        <ReuseTabs> </ReuseTabs>
+        @Body
+@*         @if (_isLoaded) {
+            @Body
+        } else {
+            <Spin Tip="首次加载中..." Size="SpinSize.Small"></Spin> <!-- Ant Design 加载动画 -->
+        } *@
+    </ChildContent>
+    <FooterRender>
+        <FooterView Copyright="2021 Ant Design Blazor" Links="Links"></FooterView>
+    </FooterRender>
+</AntDesign.ProLayout.BasicLayout>
+
+<SettingDrawer />
+
+@code{
+    bool collapsed;
+    private bool _isLoaded = false;
+
+    private MenuDataItem[] _menuData;
+    protected override async Task OnInitializedAsync()
+    {
+
+        _menuData = new[] {
+                new MenuDataItem
+                {
+                    Path = "/",
+                    Name = "Home",
+                    Key = "home",
+                    Icon = "bars",
+                },
+                new MenuDataItem
+                {
+                    Path = "/counter",
+                    Name = "Counter",
+                    Key = "counter",
+                    Icon = "bars",
+                }
+            };
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+        if (firstRender) {
+            await Task.Delay(200); // 确保资源加载
+            _isLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    public LinkItem[] Links =
+    {
+
+            new LinkItem
+            {
+                Key = "Ant Design Blazor",
+                Title = "Ant Design Blazor",
+                Href = "https://antblazor.com",
+                BlankTarget = true,
+            },
+            new LinkItem
+            {
+                Key = "github",
+                Title = (RenderFragment)(@<Icon Type="github" />),
+                Href = "https://github.com/ant-design-blazor/ant-design-pro-blazor",
+                BlankTarget = true,
+            },
+            new LinkItem
+            {
+                Key = "Blazor",
+                Title = "Blazor",
+                Href = "https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor?WT.mc_id=DT-MVP-5003987",
+                BlankTarget = true,
+            }
+    };
+
+    void Toggle()
+    {
+        collapsed = !collapsed;
+    }
+
+
+    void Reload()
+    {
+        collapsed = !collapsed;
+    }
+
+}

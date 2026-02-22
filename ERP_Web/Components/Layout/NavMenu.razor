@@ -1,0 +1,321 @@
+﻿@rendermode InteractiveServer
+
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@using AntDesign
+@using M = ERP_Web.Models
+@using SqlSugar
+
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">ERP_Web</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        @*         <div class="nav-item px-3">
+            <NavLink class="nav-link" href="">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div> *@
+
+        <button class="navbar-toggler" @onclick="() => ToggleNavMenu(navSubmenu)">
+            <span class="navbar-toggler-icon"></span>  按钮
+        </button>
+
+        <ul class="nav flex-column">
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" @onclick="() => ToggleNavMenu(NavSubmenu.None)" href="" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                </NavLink>
+            </li>
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" @onclick="() => TogleSubmenu(NavSubmenu.First)">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> 采购
+                </NavLink>
+            </li>
+            @if (navSubmenu == NavSubmenu.First)
+            {
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" @onclick="() => ToggleNavMenu()" href="counter">
+                        <span class="oi oi-plus" aria-hidden="true"></span> Counter
+                    </NavLink>
+                </li>
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" @onclick="() => ToggleNavMenu()" href="fetchdata">
+                        <span class="oi oi-list-rich" aria-hidden="true"></span> Fetch Data
+                    </NavLink>
+                </li>
+            }
+
+            @*             第二  库存 菜单 *@
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" @onclick="() => TogleSubmenu(NavSubmenu.Second)">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> 库存
+                </NavLink>
+            </li>
+            @if (navSubmenu == NavSubmenu.Second)
+            {
+                @foreach (var navMenu in navNavMenuBases)
+                {
+                    <li class="nav-item px-5">
+                        <NavLink class="nav-link" href="@navMenu.href">
+                            <span class="oi oi-plus" aria-hidden="true"></span> @navMenu.title
+                        </NavLink>
+                    </li>
+                }
+
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" @onclick="() => ToggleNavMenu()" href="counter">
+                        <span class="oi oi-plus" aria-hidden="true"></span> Counter
+                    </NavLink>
+                </li>
+            }
+
+            @*             第8  测试 菜单 *@
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" @onclick="() => TogleSubmenu(NavSubmenu.fifth)">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> 测试
+                </NavLink>
+            </li>
+
+            @if (navSubmenu == NavSubmenu.fifth)
+            {
+                <div class="nav-item px-5">
+                    <NavLink class="nav-link" href="test">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> 测试
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-5">
+                    <NavLink class="nav-link" href="test2">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> 测试二
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-5">
+                    <NavLink class="nav-link" href="ex">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> example
+                    </NavLink>
+                </div>
+
+            }
+
+
+            @*             第9  设置 菜单 *@
+            <li class="nav-item px-3">
+                <NavLink class="nav-link" @onclick="() => TogleSubmenu(NavSubmenu.ninth)">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> 设置
+                </NavLink>
+            </li>
+            @if (navSubmenu == NavSubmenu.ninth)
+            {
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" href="initialize">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> 初始化
+                    </NavLink>
+                </li>
+
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" href="category">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Category
+                    </NavLink>
+                </li>
+
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" href="invlist">
+                        <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> invlist
+                    </NavLink>
+                </li>
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" @onclick="() => ToggleNavMenu()" href="counter">
+                        <span class="oi oi-plus" aria-hidden="true"></span> Counter
+                    </NavLink>
+                </li>
+                <li class="nav-item px-5">
+                    <NavLink class="nav-link" @onclick="() => ToggleNavMenu()" href="fetchdata">
+                        <span class="oi oi-list-rich" aria-hidden="true"></span> Fetch Data
+                    </NavLink>
+                </li>
+            }
+        </ul>
+
+
+
+        @*      <div class="nav-item px-3">
+            <NavLink class="nav-link" href="counter">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="weather">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="picc">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Picc
+            </NavLink>
+        </div>
+
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="icadd">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> IcAdd
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="initialize">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Initialize
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="category">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Category
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="invlist">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> invlist
+            </NavLink>
+        </div> *@
+
+    </nav>
+</div>
+
+@code {
+    private enum NavSubmenu
+    {
+        None,
+        First,
+        Second,
+        third,
+        fourth,
+        fifth,
+        sixth,
+        seventh,
+        eighth,
+        ninth,
+        tenth
+    }
+
+    private string NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+    private NavSubmenu navSubmenu = NavSubmenu.None;
+    private bool collapseNavMenu = true;
+
+
+    private void ToggleNavMenu(NavSubmenu? submenu = null)
+    {
+        collapseNavMenu = !collapseNavMenu;
+        navSubmenu = submenu ?? navSubmenu;
+    }
+
+    private void TogleSubmenu(NavSubmenu submenu)
+    {
+        if (navSubmenu == submenu)
+            navSubmenu = NavSubmenu.None;
+        else
+            navSubmenu = submenu;
+    }
+}
+
+
+@code {
+    class NavMenuBase : ComponentBase
+    {
+        public string classNames = "nav-item px-3";
+        public string NavLinkClassNames = "nav-link";
+        public string spanClassNames = "bi bi-list-nested-nav-menu";
+        public string? href;
+        public string? title;
+    }
+
+    List<NavMenuBase> navNavMenuBases = new List<NavMenuBase>();
+    protected override void OnInitialized()
+    {
+        navNavMenuBases.Add(new NavMenuBase { href = "icadd", title = "库存收发" });
+        navNavMenuBases.Add(new NavMenuBase { href = "inventory_records", title = "库存记录" });
+        navNavMenuBases.Add(new NavMenuBase { href = "inventory-stocktake", title = "库存盘点" });
+        navNavMenuBases.Add(new NavMenuBase { href = "inventory-balance", title = "库存结余" });
+        navNavMenuBases.Add(new NavMenuBase { href = "test", title = "测试" });
+    }
+}
+
+
+
+
+@* <Menu Mode="MenuMode.Inline"
+                  OpenKeys=this.openKeys
+                  OnOpenChange=this.onOpenChange
+                  class="flex-column">
+                <SubMenu Key="sub1" TitleTemplate=@sub1Title>
+                    <MenuItem Key="1">Option 1</MenuItem>
+                    <MenuItem Key="2">Option 2</MenuItem>
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="icadd">
+                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> icadd
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="/invlist">
+                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> invlist
+                        </NavLink>
+                    </div>
+                </SubMenu>
+                <SubMenu Key="sub2" TitleTemplate=@sub2Title>
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="icadd">
+                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> icadd
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="/invlist">
+                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> invlist
+                        </NavLink>
+                    </div>
+                </SubMenu>
+            </Menu> *@
+@code {
+    RenderFragment sub1Title =
+    @<span>
+            <Icon Type="@IconType.Outline.Mail" />
+            <span>Navigation One</span>
+    </span>;
+
+RenderFragment sub2Title =
+@<span>
+        <Icon Type="@IconType.Outline.Appstore" />
+        <span>Navigation Two</span>
+</span>;
+
+RenderFragment sub3Title =
+@<span>
+        <Icon Type="@IconType.Outline.Setting" />
+        <span>Navigation Three</span>
+</span>;
+
+// submenu keys of first level
+string[] rootSubmenuKeys = { "sub1", "sub2", "sub4" };
+
+string[] openKeys = { "sub1" };
+
+void onOpenChange(string[] openKeys)
+{
+var latestOpenKey = openKeys.FirstOrDefault(key => !this.openKeys.Contains(key));
+if (!rootSubmenuKeys.Contains(latestOpenKey))
+{
+this.openKeys = openKeys;
+}
+else
+{
+this.openKeys = !string.IsNullOrEmpty(latestOpenKey) ? new[] { latestOpenKey } : Array.Empty<string>();
+}
+}
+    }

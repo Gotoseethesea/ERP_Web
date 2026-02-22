@@ -1,0 +1,399 @@
+﻿@page "/inventory-stocktake"
+
+<h3>InvStocktakeList</h3>
+@rendermode InteractiveServer
+@using System.ComponentModel
+@using AntDesign.TableModels
+@using AntDesign.Core.Extensions
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using M = ERP_Web.Models
+@using Newtonsoft.Json
+@using SqlSugar
+@using AntDesign
+@inject ModalService ModalService
+
+@inject IMessageService _message
+
+<Button Type="ButtonType.Primary" OnClick="@(()=>{ _visible = true; })">
+    创建盘点表
+</Button>
+<p></p>
+<Modal Title="@title"
+       @bind-Visible="@_visible"
+       OnOk="CreateStocktake">
+    <label>日期:</label>
+    <DatePicker @bind-Value="SelectedDate" Picker="DatePickerType.Date" />
+    <br />
+    <label>仓库:</label>
+    <Select Mode="SelectMode.Default"
+            TItem="M.Warehouse"
+            TItemValue="string"
+            DataSource="@Warehouselist"
+            @bind-Value="@SelectedWarehouseCode"
+            OnSelectedItemChanged="WarehouseChange"
+            ValueName="@nameof(M.Warehouse.Code)"
+            LabelName="@nameof(M.Warehouse.Name)"
+            title="仓库"
+            Style="width: 25%; margin-bottom: 8px;"
+            EnableSearch
+            AllowClear>
+    </Select>
+    <div style="margin: 64px" />
+
+
+    <b>Popconfirm:</b><br />
+    <Popconfirm Title="Are you sure delete this task?"
+                OkText="Yes"
+                CancelText="No">
+        <a>Delete</a>
+    </Popconfirm>
+</Modal>
+
+@code{
+    string title = "BasicModal";
+    bool _visible = false;
+    public int SelectedFiscalYear;
+    public int SelectedPeriod;
+    public string SelectedWarehouseCode;
+    public DateOnly SelectedDate = DateOnly.FromDateTime(DateTime.Now);
+
+    private void AddIcInvList()
+    {
+        SqlClient SSC = new SqlClient();
+        var json = System.IO.File.ReadAllText("wwwroot/Data/IcInvData.json");
+        var IcInvList = JsonConvert.DeserializeObject<List<M.IcInv>>(json);
+        SSC.Db.Insertable(IcInvList).ExecuteCommand();
+    }
+
+    public void CreateStocktake()
+    {
+        SqlClient SSC = new SqlClient();
+        SelectedFiscalYear = SelectedDate.Year;
+        SelectedPeriod = SelectedDate.Month;
+        var InvBalance = SSC.Db.Queryable<M.InventoryBalance>()
+            .Where(s => s.WarehouseCode == SelectedWarehouseCode).ToList();
+        List<M.StocktakeDetail> stocktakeDetails = new();
+        decimal SumQauanty = 0, SumAmount = 0;
+        foreach (var row in InvBalance)
+        {
+            var detail = new M.StocktakeDetail
+            {
+                InvCode = row.InvCode,
+                Inv = row.Inv,
+                Quantity = row.Quantity,
+                StockCount = 0,
+                Price = row.Price,
+                Amount = row.Amount
+            };
+            SumQauanty = SumQauanty + detail.Quantity;
+            SumAmount = SumAmount + detail.Amount;
+            stocktakeDetails.Add(detail);
+        };
+
+        var stocktake = new M.Stocktake
+        {
+            Code = SelectedWarehouseCode + SelectedFiscalYear.ToString() + SelectedPeriod.ToString(),
+            FiscalYear = SelectedFiscalYear,
+            Period = SelectedPeriod,
+            WarehouseCode = SelectedWarehouseCode,
+            Warehouse = SSC.Db.Queryable<M.Warehouse>()
+                .Where(x => x.Code == SelectedWarehouseCode).First(),
+            Quantity = SumQauanty,
+            Amount = SumAmount,
+            StocktakeDetails = stocktakeDetails
+        };
+
+        SSC.Db.InsertNav(stocktake)
+            .Include(z1 => z1.StocktakeDetails)
+            .ExecuteCommand();
+    }
+}
+ <div>
+<label>年度</label>
+<Select Mode="SelectMode.Multiple"
+        Placeholder="Please select"
+        @bind-Values="@YearSelected"
+        TItemValue="string"
+        TItem="string"
+        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+        Style="width: 20%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+    <SelectOptions>
+        @foreach (var item in YearSe)
+        {
+            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+        }
+    </SelectOptions>
+</Select>
+<label>月份</label>
+<Select Mode="SelectMode.Multiple"
+        Placeholder="Please select"
+        @bind-Values="@MonthSelected"
+        TItemValue="string"
+        TItem="string"
+        title="月份"
+        OnSelectedItemsChanged="OnSelectedItemsChangedHandler"
+        Style="width: 20%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+    <SelectOptions>
+        @foreach (var item in MonthSe)
+        {
+            <SelectOption TItemValue="string" TItem="string" Value=@item Label=@item />
+        }
+    </SelectOptions>
+</Select>
+
+<label>仓库</label>
+<Select Mode="SelectMode.Multiple"
+        TItem="M.Warehouse"
+        TItemValue="string"
+        DataSource="@Warehouselist"
+        @bind-Values="@WarehSelected"
+        OnSelectedItemChanged="WarehouseChange"
+        ValueName="@nameof(M.Warehouse.Code)"
+        LabelName="@nameof(M.Warehouse.Name)" 
+        title="仓库"
+        Style="width: 25%; margin-bottom: 8px;"
+        EnableSearch
+        AllowClear>
+</Select>
+
+
+<Button OnClick="Refresh" Type="@ButtonType.Primary" Size="ButtonSize.Small" HtmlType="submit">
+    搜索
+</Button>
+
+
+@code
+{
+    List<string> MonthSe, YearSe;
+    IEnumerable<string> MonthSelected, YearSelected, WarehSelected;  //选择的月份和年度、仓库
+    List<M.Warehouse> Warehouselist;
+    string WarehouseCode = "WH001";
+
+    public void WarehouseChange(M.Warehouse values)
+    {
+        if (values != null)
+            Console.WriteLine($"selected: ${string.Join(",", values)}");
+    }
+    void SelectOnIn()
+    {
+        const int min = 1;
+        const int max = 12;
+        MonthSe = new List<string>();   //月份选项
+        YearSe = new List<string>();    //年度选项
+
+        for (var i = min; max >= i; i++)
+        {
+            var value = Convert.ToString(i);
+            var value2 = Convert.ToString(2022 + i);
+            MonthSe.Add(value);
+            YearSe.Add(value2);
+        }
+
+        if (YearSelected == null || YearSelected.Count() == 0)
+        {
+            string year = DateTime.Now.Year.ToString();
+            YearSelected = new List<string>() { year };
+        }
+        // Console.WriteLine($"selected: ${string.Join(",")}");
+
+        //       if(WarehSelected == null || WarehSelected.Count() ==0)
+        //       {
+        //           WarehSelected = new List<string>() { WareH };
+        // }
+    }
+
+    private void OnSelectedItemsChangedHandler(IEnumerable<string> values)
+    {
+        if (values != null)
+            Console.WriteLine($"selected: ${string.Join(",", values)}");
+    }
+    public List<IConditionalModel> conModels;
+    public void ConModelsRefresh()
+    {
+        conModels = new List<IConditionalModel>();
+        var ConMon = new ConditionalCollections();  //       Condition condition = new Condition
+        var ConMonList = new List<KeyValuePair<WhereType, SqlSugar.ConditionalModel>>();
+
+        foreach (var Year in YearSelected)
+        {
+            var con = new ConditionalModel()
+            {
+                ConditionalType = ConditionalType.Equal, //IN
+                FieldName = "FiscalYear",
+                FieldValue = Year,
+                CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+            };
+            // conModels.Add(con);
+        }
+
+        if (MonthSelected != null)
+        {
+            int i = 1;
+            foreach (var Mon in MonthSelected)
+            {
+                var conM = new ConditionalModel();
+                KeyValuePair<WhereType, SqlSugar.ConditionalModel> conKey;
+                if (i == 1)
+                {
+                    conKey = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.And,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "Period",
+                        FieldValue = Mon,
+                        CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+                    });
+                    i++;
+                }
+                else
+                {
+                    conKey = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.Or,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "Period",
+                        FieldValue = Mon,
+                        CSharpTypeName = "int" //设置类型 和C#名称一样常用的支持
+                    });
+                }
+                // ConMonList.Add(conKey);
+            }
+        }
+
+        if (WarehSelected != null)
+        {
+            int j = 1;
+            foreach (var Wareh in WarehSelected)
+            {
+                var conW = new ConditionalModel();
+                KeyValuePair<WhereType, SqlSugar.ConditionalModel> conKeyW;
+                if (j == 1)
+                {
+                    conKeyW = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.And,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "WarehouseCode",
+                        FieldValue = Wareh,
+                        CSharpTypeName = "string" //设置类型 和C#名称一样常用的支持
+                    });
+                    j++;
+                }
+                else
+                {
+                    conKeyW = new KeyValuePair<WhereType, SqlSugar.ConditionalModel>(
+                    WhereType.Or,
+                    new ConditionalModel()
+                    {
+                        ConditionalType = 0,
+                        FieldName = "WarehouseCode",
+                        FieldValue = Wareh,
+                        CSharpTypeName = "string" //设置类型 和C#名称一样常用的支持
+                    });
+                }
+                ConMonList.Add(conKeyW);
+            }
+        }
+        ConMon.ConditionalList = ConMonList;
+        conModels.Add(ConMon);
+    }
+
+    public void Refresh()
+    {
+        ConModelsRefresh();
+        SqlClient SSC = new SqlClient();
+        data = SSC.Db.Queryable<M.Stocktake>()
+            .IncludesAllFirstLayer()
+            .Where(conModels).ToList();
+        _table.ResetData();
+    }
+}
+</div>
+
+<Table TItem="M.Stocktake" DataSource="@data" AutoColIndexes="false" @ref="_table" PageSize="20"
+       ScrollY="800px"
+       EnableVirtualization>
+    <GenerateColumns Range="1..12" HideColumnsByName="@(new[] { "Warehouse", "Inv" })" Definitions=definitions />
+    <ActionColumn ColIndex="4" Title="Action">
+        <Space Size=@("middle")>
+            <SpaceItem>
+                <a>Invite @context.Code</a>
+            </SpaceItem>
+            <SpaceItem>
+                <a>Delete</a>
+            </SpaceItem>
+        </Space>
+    </ActionColumn>
+</Table>
+<Table TItem="M.Stocktake" DataSource="@data" AutoColIndexes="false" @ref="_table" PageSize="20"
+       ScrollY="300px"
+       EnableVirtualization>
+    <GenerateColumns Range="1.."  HideColumnsByName="@(new[] { "ID" })" Definitions=definitions />
+    <ActionColumn ColIndex="4" Title="Action">
+        <Space Size=@("middle")>
+            <SpaceItem>
+                <a>Invite @context.Code</a>
+            </SpaceItem>
+            <SpaceItem>
+                <a href="/StocktakeView/@context.Code">View</a>
+                <a>Delete</a>
+            </SpaceItem>
+        </Space>
+    </ActionColumn>
+</Table>
+
+@code {
+    public string WarehCode = "WH001";
+    public string InvCode = "INV001";
+    public Table<M.Stocktake> _table;
+    public List<M.Stocktake> data = new List<M.Stocktake>();
+
+    protected override void OnInitialized()
+    {
+        SelectOnIn();
+        ConModelsRefresh();
+        SnowFlakeSingle.WorkId = 2;
+        SqlClient SSC = new SqlClient();
+        data = SSC.Db.Queryable<M.Stocktake>()
+             .ToList();
+
+        Warehouselist = SSC.Db.Queryable<M.Warehouse>().Where(x=>x.Active == true).ToList();
+    }
+    /// <summary>
+    /// An Action to defined each column
+    /// </summary>
+    /// <param name="propertyName">The name of the property binding the column. </param>
+    /// <param name="column">The column instance, you need to explicitly cast to a concrete Column type. </param>
+    void definitions(string propertyName, IFieldColumn column)
+    {
+        if (propertyName == "Tags")
+        {
+            var tagCol = ((Column<string[]>)column);
+            tagCol.CellRender = cellData =>
+            @<span>
+            @foreach (var tag in cellData.FieldValue)
+            {
+                var color = tag.Length > 5 ? TagColor.GeekBlue : TagColor.Green;
+                if (tag == "loser")
+                {
+                    color = TagColor.Volcano;
+                }
+                    <Tag Color="@color">@tag</Tag>
+            }
+            </span>;
+
+            return;
+        }
+
+        column.Sortable = true;
+        column.Filterable = true;
+    }
+}

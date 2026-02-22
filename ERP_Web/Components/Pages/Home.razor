@@ -1,0 +1,21 @@
+﻿@page "/"
+@using SqlSugar
+
+@* @layout BasicLayout
+ *@
+<!-- 页面具体内容 -->
+<h1>Welcome to our app!</h1>
+
+<PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+@code{
+    protected override void OnInitialized()
+    {
+        SnowFlakeSingle.WorkId = 20;
+    }
+}
+

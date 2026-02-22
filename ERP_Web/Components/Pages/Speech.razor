@@ -1,0 +1,245 @@
+﻿
+@* @page "/test" *@
+@using AntDesign.JsInterop
+@using ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+@using System.Reflection.Metadata
+@using System.Text.Json;
+@using System.Text.RegularExpressions
+
+@rendermode InteractiveServer
+@inject IJSRuntime JS 
+
+
+<p></p>
+<button id="startBtn" class="">开始录音</button>
+<button id="stopBtn" disabled>停止录音</button>
+<p></p>
+
+<div id="myDiv" class="hidden">
+
+    <Space Direction="SpaceDirection.Vertical">
+        <SpaceItem>
+            <Search Placeholder="input search text" @bind-Value="@FinalRes" EnterButton="@("Search")" Size="InputSize.Large" Suffix="@_audioIcon" />
+        </SpaceItem>
+    </Space>
+
+    @code {
+        RenderFragment _audioIcon =@<Icon Type="@IconType.Outline.Audio" Style="color: #1890ff" />;
+    }
+ <lib>抽取结果</lib>
+    <input id="FinalRes" value="@FinalRes" @onchange="OnFinalResValueChanged" />
+    <lib>全部结果</lib>
+    <input id="AllRes" type="text" value="@AllRes" @onchange="OnAllResValueChanged" />
+    <button @onclick="SpeechReturn">获取结果到C#变量</button>
+    <p></p>
+    <div id="transcript">
+        {
+        "paragraphs": []
+        }
+    </div>
+</div>
+<style>
+    .hidden {
+        display: none;
+    }
+
+    .visible {
+        display: block;
+    }
+</style>
+
+<lib>C#变量</lib>
+<lib>FinalRes</lib>
+<p>@FinalRes</p>
+<p></p>
+<lib>AllRes</lib>
+<p>@AllRes</p>
+
+@code{
+    [Parameter]
+    public string FinalRes { get; set; }
+    //[Parameter]
+    public string AllRes { get; set; }
+
+    [Parameter]
+    public EventCallback<ChangeEventArgs> FinalResChanged { get; set; }
+
+    private void OnFinalResValueChanged(ChangeEventArgs e)
+    {
+        FinalRes = e.Value?.ToString();
+    }
+
+    private void OnAllResValueChanged(ChangeEventArgs e)
+    {
+        AllRes = e.Value?.ToString();
+    }
+
+    private async Task SpeechReturn(){
+        AllRes = new(await JS.InvokeAsync<string>("SpeechAllReturn"));
+        FinalRes = new(await JS.InvokeAsync<string>("SpeechFinalReturn"));
+        FinalRes = Regex.Replace(FinalRes, @"[\p{P}-[.]]", string.Empty);
+    }
+
+    void GetRes()
+    {
+        SpeechReturn().Wait();
+        speechToString(AllRes);
+    }
+
+    List<string> speechToString(string value)
+    {
+        List<string> res = [];
+        var json = JsonDocument.Parse(value).RootElement;
+        var json2 = json.GetProperty("paragraphs");
+
+        foreach (JsonElement je in json2.EnumerateArray())
+        {
+            var sentences = je.GetProperty("sentences")[1];
+            var finalTranscript = sentences.GetProperty("finalTranscript");
+            Console.WriteLine($"结果: {finalTranscript.GetString()}");
+            if (finalTranscript.GetString() is not null)
+                res.Add(finalTranscript.GetString());
+        }
+        return res;
+    }
+
+    private async Task Speechtest()
+    {
+        string result = "";
+        // result = new(await JS.InvokeAsync<string>("SpeechRecognition"));
+
+        result = FinalRes;
+		var result2 = AllRes;
+    }
+
+}
+<script>
+    (function () {
+        // 获取页面中的按钮和显示区域
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const transcriptDiv = document.getElementById('transcript');
+        const FinalRes = document.getElementById('FinalRes');
+        const AllResDiv = document.getElementById('AllRes');
+        // 状态变量
+        let isRecognizing = false; // 是否正在识别
+        let recognition = null; // 语音识别实例
+        let speechContent = {
+            paragraphs: []
+        }; // 存储识别内容
+        let currentParagraph = { sentences: [] }; // 当前段落
+
+        // 初始化 Web Speech API
+        window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+        // 检查浏览器是否支持语音识别
+        if (!window.SpeechRecognition) {
+            alert("您的浏览器不支持语音识别。请使用最新版本的 Chrome 或 Edge。");
+            startBtn.disabled = true; // 禁用开始按钮
+            return;
+        }
+
+        // 创建语音识别实例
+        recognition = new window.SpeechRecognition();
+        recognition.lang = 'zh-CN'; // 设置语言为中文
+        recognition.interimResults = true; // 启用中间结果
+        recognition.continuous = true; // 启用连续识别
+
+        // 语音识别开始时的回调
+        recognition.onstart = () => {
+            console.log('语音识别已启动。');
+            isRecognizing = true;
+            startBtn.disabled = true; // 禁用开始按钮
+            stopBtn.disabled = false; // 启用停止按钮
+        };
+
+        // 语音识别出错时的回调
+        recognition.onerror = (event) => {
+            console.error('语音识别错误:', event.error);
+            alert(`语音识别错误: ${event.error}`);
+            isRecognizing = false;
+            startBtn.disabled = false; // 启用开始按钮
+            stopBtn.disabled = true; // 禁用停止按钮
+        };
+
+        // 语音识别结束时的回调
+        recognition.onend = () => {
+            console.log('语音识别已结束。');
+            isRecognizing = false;
+            startBtn.disabled = false; // 启用开始按钮
+            stopBtn.disabled = true; // 禁用停止按钮
+        };
+
+        // 语音识别结果时的回调
+        recognition.onresult = (event) => {
+            // 遍历所有识别结果
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                transcript = result[0].transcript.trim(); // 获取识别的文本
+                const isFinal = result.isFinal; // 是否为最终结果
+                transcript = transcript.replace(/[`:_.~!#$%^&*() \+ =<>?"{}|, \/ ;' \\ [ \] ·~！#￥%……&*（）—— \+ ={}|《》？：“”【】、；‘’，。、]/g,'');
+                //去除语音中的符号，例如句号等
+                if (isFinal) {
+                    // 如果是最终结果，将句子添加到当前段落
+                    currentParagraph.sentences.push({ finalTranscript: transcript });
+                    speechContent.paragraphs.push(currentParagraph); // 将段落添加到speechContent
+                    currentParagraph = { sentences: [] }; // 重置当前段落
+
+                    FinalRes.value = transcript; //把每次显示的内容展示
+                    FinalRes.dispatchEvent(new Event('change'))
+                
+                } else {
+                    // 如果是临时结果，更新当前段落的最后一个句子
+                    if (currentParagraph.sentences.length === 0) {
+                        // 如果当前段落没有句子，添加一个临时句子
+                        currentParagraph.sentences.push({ interimTranscript: transcript });
+                    } else {
+                        // 更新最后一个句子的临时文本
+                        currentParagraph.sentences[currentParagraph.sentences.length - 1].interimTranscript = transcript;
+                    }
+                }
+            }
+            updateTranscript(); // 更新显示区域
+        };
+
+        // 开始录音按钮的点击事件
+        startBtn.addEventListener('click', () => {
+            if (recognition && !isRecognizing) {
+                recognition.start(); // 启动语音识别
+                console.log('开始录音...');
+            }
+        });
+
+        // 停止录音按钮的点击事件
+        stopBtn.addEventListener('click', () => {
+            if (recognition && isRecognizing) {
+                recognition.stop(); // 停止语音识别
+                console.log('停止录音。');
+            }
+        });
+
+        // 更新显示区域的函数
+        function updateTranscript() {
+            // 将speechContent对象格式化为JSON字符串，并显示在页面上
+            transcriptDiv.textContent = JSON.stringify(speechContent, null, 2);
+            AllResDiv.value = JSON.stringify(speechContent, null, 2)
+			AllResDiv.dispatchEvent(new Event('change'))
+        }
+
+        // 初始显示
+        updateTranscript();
+    })();
+
+    window.SpeechAllReturn = () => {
+      const AllRes = document.getElementById('AllRes');
+      // return AllRes.textContent;
+      return AllRes.value;
+    };
+    window.SpeechFinalReturn = () => {
+      const FinalRes = document.getElementById('FinalRes');
+      return FinalRes.value;
+    };
+</script>
