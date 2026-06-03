@@ -1,12 +1,24 @@
 ﻿using ERP_Web.Repository;
 using NPOI.XWPF.UserModel;
 using SqlSugar;
+//using Microsoft.EntityFrameworkCore.Metadata.Internal;
+//using SqlSugar;
 using System;
+//using SysteCollections.Generic;
+//using SysteComponentModel.DataAnnotations;
+//using SysteComponentModel.DataAnnotations.Schema;
+//using SysteDrawing.Printing;
+//using SysteReflection.Emit;
+//using SysteRuntime.CompilerServices;
+//using SysteRuntime.Intrinsics.X86;
+//using static Dnet.buffer.ByteArrayBuffer;
+//using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ERP_Web.Models
 {
+
     /// <summary>
     /// 库存出入库主表
     /// 入库单，出库单，调拨单隐藏，直拨单显示，trxType 1入库，-1出库，调拨  0直拨
@@ -20,7 +32,9 @@ namespace ERP_Web.Models
         [Display(Name = "出入库类型")]
         public string TrxGroupCode { set; get; }
         [Navigate(NavigateType.OneToOne, nameof(TrxGroupCode))]//一对一 
+
         public TrxGroup TrxGroup { set; get; } = new OneToOneInitializer<TrxGroup>();
+
         public int TrxType { set; get; }
         public string? WarehouseCode { set; get; } 
         [Navigate(NavigateType.OneToOne, nameof(WarehouseCode))]//一对一
@@ -59,11 +73,13 @@ namespace ERP_Web.Models
         public int? InvTrxCode {  set; get; }
         [Navigate(NavigateType.OneToMany, nameof(InvTrx.IcCode))]//一对多
         public List<InvTrx>? InvTrxs { set; get; }
+
         public Ic()
         {
             FiscalYear = Date.Year;
             Period = Date.Month;        
         }
+
         public void UpdateInvPrice()
         {
             if (InvTrxs != null)

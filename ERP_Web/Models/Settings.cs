@@ -181,7 +181,7 @@ namespace ERP_Web.Models
                 .IncludesAllFirstLayer()
                 .Where(x => x.Active == true).ToList();
             return result;
-        }
+    }
     }
     public class Company
     {
@@ -209,7 +209,7 @@ namespace ERP_Web.Models
                 .IncludesAllFirstLayer()
                 .Where(x => x.Active == true)
                 .ToList();
-        }
+    }
 
         // 插入方法
         public async Task Insert()
@@ -294,7 +294,7 @@ namespace ERP_Web.Models
                     yield return child;
                 }
             }
-        }
+    }
         // 构建树形结构的方法
         public static List<Department> BuildTree(List<Department> allDepartments, int? Superior = null)
         {
@@ -495,7 +495,7 @@ namespace ERP_Web.Models
         {
             var sqlClient = new SqlClient();
             await sqlClient.Db.Updateable(this).ExecuteCommandAsync();
-        }
+    }
 
         // "删除"方法（标记为无效）
         public async Task Delete()
@@ -523,6 +523,48 @@ namespace ERP_Web.Models
         public string? EmployeeCode { set; get; }
         [Navigate(NavigateType.OneToOne, nameof(EmployeeCode))]//一对一
         public Employee Employee { set; get; } = new OneToOneInitializer<Employee>();
+        public string? Note { set; get; }
+        public int? Sequence { set; get; }
+        public bool Active { set; get; } = true;
+    }
+
+    public class MenuList
+    {
+        [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
+        public int Id { set; get; }
+        public string? Code { set; get; }
+        public string Name { set; get; } = "Home";              //菜单名称
+        public string Path { set; get; } = "/";                 //菜单路径
+        public string Key { set; get; } = "any";                //绑定标签{ set; get; }
+        //public string[] ParentKeys { set; get; } = new string[] { "any" };
+        public string? Icon { set; get; }                       //图标
+        public bool HideChildrenInMenu { set; get; } = false;   //会把这个路由的子节点在 menu
+        public bool HideInMenu { set; get; } = false;           //是否在菜单中隐藏
+        public string? Locale { set; get; }                     //可以设置菜单名称的国际化表示49应该
+        public int? ParentId { set; get; }
+        [Navigate(NavigateType.OneToMany, nameof(MenuList.ParentId))]//一对多
+        public List<MenuList>? Children { set; get; }
+        public string? Note { set; get; }
+        public int? Sequence { set; get; }
+        public bool Active { set; get; } = true;
+    }
+
+    public class User
+    {
+        [SugarColumn(IsPrimaryKey = true)]
+        public string Code { set; get; }
+        public string? Account { set; get; }
+        public string? Password { set; get; }
+        public string? Name { set; get; }
+        public string? Role { set; get; }
+        public string? Department { set; get; }
+        public string? JobTitle { set; get; }
+        public string? Language { set; get; }
+        public string? Phone { set; get; }
+        public string? EmployeeCode { set; get; }
+        [Navigate(NavigateType.OneToOne, nameof(EmployeeCode))]//一对一
+        public Employee Employee { set; get; } = new OneToOneInitializer<Employee>();
+
         public string? Note { set; get; }
         public int? Sequence { set; get; }
         public bool Active { set; get; } = true;

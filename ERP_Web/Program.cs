@@ -1,4 +1,5 @@
-﻿using AntDesign.ProLayout;
+﻿using AntDesign;
+using AntDesign.ProLayout;
 using Append.Blazor.Printing;
 using ERP_Web.Repository;
 using ERP_Web.Components;
@@ -286,6 +287,7 @@ var app = builder.Build();
 app.UseCors("AllowWithCookie");
 
 
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
@@ -315,4 +317,5 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(typeof(ERP_Web.Client._Imports).Assembly);
+
 app.Run();

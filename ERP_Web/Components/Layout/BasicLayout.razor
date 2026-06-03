@@ -62,7 +62,7 @@
         {
             <Spin Tip="首次加载中..." Size="SpinSize.Small"></Spin> <!-- Ant Design 加载动画 -->
         }
-   </ChildContent>
+    </ChildContent>
     <FooterRender>
         <FooterView Copyright="2026 ERP管理系统 | 版本 V1.0" Links="Links"></FooterView>
     </FooterRender>
@@ -96,6 +96,64 @@
     protected override async Task OnInitializedAsync()
     {
         SnowFlakeSingle.WorkId = 24;//唯一数字;
+        // _menuData = new[] {
+        //         new MenuDataItem
+        //         {
+        //             // authority = "admin",
+        //             Path = "/",
+        //             Name = "Home",
+        //             Key = "home",
+        //             Icon = "home",
+        //         },
+        //         new MenuDataItem
+        //         {
+        //             Path = "/icadd",
+        //             Name = "库存",
+        //             Key = "IcAdd",
+        //             Icon = "menu-unfold",
+        //             Children = [
+        //                 new MenuDataItem{
+        //                     Path = "/icadd",
+        //                     Name = "库存收发",
+        //                     Key = "icadd.icadd",
+        //                     Icon = "plus-square"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/inventory_records",
+        //                     Name = "库存记录",
+        //                     Key = "inventory_records",
+        //                     Icon = "unordered-list"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/inventory-balance",
+        //                     Name = "库存结余",
+        //                     Key = "inventory-balance",
+        //                     Icon = "menu-unfold"
+        //                 },
+        //                 new MenuDataItem{
+        //                     Path = "/inventory-stocktake",
+        //                     Name = "库存盘点",
+        //                     Key = "inventory-stocktake",
+        //                     Icon = "menu-unfold",
+        //                     HideChildrenInMenu = true
+        //                 }
+        //             ]
+        //         },
+        //         new MenuDataItem
+        //         {
+        //             Path = "/counter",
+        //             Name = "Counter",
+        //             Key = "counter",
+        //             Icon = "menu-unfold",
+        //         },
+        //         new MenuDataItem
+        //         {
+        //             Path = "/initialize",
+        //             Name = "设置",
+        //             Key = "setting",
+        //             Icon = "setting",
+        //             Children = [
+        //                 new MenuDataItem{
 
         // ✅ 新增：从localStorage读取当前选中模块，没选就跳转到模块选择页
         //await JSRuntime.InvokeVoidAsync("localStorage.setItem", "currentModule", module);
@@ -106,7 +164,12 @@
 
         if (firstRender)
         {
-            SqlClient SSC = new SqlClient();
+        SqlClient SSC = new SqlClient();
+        List<Models.MenuList> menuData = SSC.Db.Queryable<Models.MenuList>()
+            .IncludesAllFirstLayer()
+            .Where(xx=>xx.Active == true && (xx.ParentId == null || xx.ParentId == 0)).ToList();
+        _menuData = CreateMenu(menuData);
+
 
             _currentModule = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "currentModule") ?? string.Empty;
             _currentModuleIcon = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "currentModuleIcon") ?? string.Empty;
@@ -118,7 +181,7 @@
                 _isLoaded = true;
                 StateHasChanged();
                 return;
-            }
+    }
 
             _menuData = new[] {
                 new MenuDataItem
@@ -164,14 +227,14 @@
                     ]
                 },
                 new MenuDataItem
-                {
+    {
                     Path = "/counter",
                     Name = "Counter",
                     Key = "counter",
                     Icon = "menu-unfold",
                 },
                 new MenuDataItem
-                {
+        {
                     Path = "/initialize",
                     Name = "设置",
                     Key = "setting",
@@ -222,12 +285,12 @@
                 // 用户未登录，显示登录菜单
                 _menuData = new[] {
                 new MenuDataItem
-                {
+            {
                     Path = "/login",
                     Name = "登录",
                     Key = "login",
                     Icon = "login",
-                }
+            }
             };
                 _isLoaded = true;
                 return;
@@ -272,7 +335,7 @@
             // 4. 应用权限过滤并转换为前端格式
             _menuData = AppMenu.CreateMenu(menuTree, userPermissions);
             _isLoaded = true;
-        }
+    }
         if (firstRender)
         {
             await Task.Delay(100); // 确保资源加载

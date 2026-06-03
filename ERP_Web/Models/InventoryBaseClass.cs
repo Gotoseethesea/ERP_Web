@@ -126,6 +126,25 @@ namespace ERP_Web.Models
                                    // 可以根据实际业务扩展
     }
 
+        public InventoryItem()
+        {
+            //SqlClient SSC = new SqlClient();
+            Id = SnowFlakeSingle.Instance.NextId(); //SSC.GetNextID("InventoryItem");雪花算法生成ID
+            if (UnitList == null)
+            {
+                UnitList = new List<InventoryUnit>();
+                UnitList.Add(new InventoryUnit()
+                {
+                    Id = SnowFlakeSingle.Instance.NextId(),
+                    InvCode = this.Code,
+                    Unit = this.Unit ?? "个",
+                    IsMinimumUnit = true,
+                    ConversionRatio = 1,
+                    Active = true
+                });
+            }
+        }
+    }
     /// <summary>
     /// 存货收发明细基类
     /// </summary>
@@ -358,6 +377,8 @@ namespace ERP_Web.Models
         {
             prefix ??= "DB";
             var yearMonth = DateTime.Now.ToString("yyMM");
+
+            // 3. 拼接当前年月前缀（如PR2601）
             var currentPrefix = $"{prefix}{yearMonth}";
             const int seqLength = 5;
 
@@ -583,7 +604,7 @@ namespace ERP_Web.Models
     }
 
     public class ApprovalStep
-    {
+        {
         [SugarColumn(IsPrimaryKey = true)]
         public long Id { get; set; }
     

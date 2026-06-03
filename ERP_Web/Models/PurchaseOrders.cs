@@ -93,6 +93,7 @@ namespace ERP_Web.Models
         {
             GetTrxNo<PurchaseRequisition>("PR");
             if (PRInvInOuts == null) PRInvInOuts = new List<PRInvInOut>();
+
         }
 
         public void UpdateInvPrice()
@@ -101,7 +102,7 @@ namespace ERP_Web.Models
             {
                 foreach (PRInvInOut prInvInOut in PRInvInOuts)
                 {
-                    prInvInOut.UpdatePriceByIn();
+                    prInvInOut.UpdatePriceByIn(); 
                 }
             }
         }
@@ -865,6 +866,7 @@ namespace ERP_Web.Models
                         po.POInvInOuts.Add(PRInvInOutToPO(prInvInOut));
                         purchaseOrders.Add(po);
                     }
+
                 }
             }
             return purchaseOrders;
@@ -908,6 +910,11 @@ namespace ERP_Web.Models
         public string? Operator { set; get; }
         public string? Checker { set; get; }
         public string? Poster { set; get; }
+
+        /// <summary>
+        /// 修改时间
+        /// </summary>
+        public DateTime LastUpdateTime { set; get; } = DateTime.Now;
 
         [Navigate(NavigateType.OneToMany, nameof(POInvInOut.POCode))]//一对多
         public List<POInvInOut>? POInvInOuts { set; get; }
@@ -1064,13 +1071,13 @@ namespace ERP_Web.Models
                                                               // 其他字段根据业务需要复制...
                     };
                     receivingNote.RNInvInOuts.Add(rnItem);
-                }
+        }
             }
             // 3. 更新收货单主单的汇总信息
             receivingNote.UpdateAmount();
 
             return receivingNote;
-        }
+    }
     }
 
 
@@ -1162,11 +1169,11 @@ namespace ERP_Web.Models
             this.GetTrxNo<ReceivingNote>("RN");
             SqlClient SSD = new();
             SSD.Db.InsertNav(this).Include(z => z.RNInvInOuts).ExecuteCommand();
-        }
+    }
 
         // 更新方法（使用导航更新）
         public void Update()
-        {
+    {
             SqlClient SSD = new();
             SSD.Db.UpdateNav(this).Include(z => z.RNInvInOuts) // 更新明细
                     .ExecuteCommand();
@@ -1201,7 +1208,7 @@ namespace ERP_Web.Models
         public static List<PurchaseOrder> GetList(Expression<Func<PurchaseOrder, bool>> whereExpression)
         {
             using (var db = new SqlClient().Db)
-            {
+        {
                 return db.Queryable<PurchaseOrder>()
                     .Includes(x => x.POInvInOuts)
                     .Where(whereExpression)
@@ -1216,7 +1223,7 @@ namespace ERP_Web.Models
             if (RNInvInOuts != null)
             {
                 foreach (var item in RNInvInOuts)
-                {
+        {
                     Quantity += item.Quantity;
                     Amount += item.Amount;
                     AmountIncTax += item.AmountIncTax;
@@ -1263,7 +1270,7 @@ namespace ERP_Web.Models
                 foreach (var rnItem in warehouseGroup)
                 {
                     var invItem = new ITInvInOut
-                    {
+        {
                         InvCode = rnItem.InvCode,
                         InventoryItem = rnItem.InventoryItem,
                         SKU = rnItem.SKU,
@@ -1277,7 +1284,7 @@ namespace ERP_Web.Models
                         IcCode = inventoryTransaction.Code
                     };
                     inventoryTransaction.ITInvInOuts.Add(invItem);
-                }
+        }
 
                 // 4. 更新当前入库单的汇总信息
                 inventoryTransaction.UpdateAmount();
@@ -1304,30 +1311,37 @@ namespace ERP_Web.Models
                 throw new InvalidOperationException("仅已审核的收货单可完成入库");
 
             using (var scope = new TransactionScope())
-            {
+        {
                 // 生成按仓库分组的入库单
                 var inventoryTransactions = this.ConvertToInventoryTransactions();
 
                 foreach (var transaction in inventoryTransactions)
-                {
+            {
                     // 设置状态并保存
                     transaction.Status = DocumentStatus.Completed;
                     transaction.Insert();
 
                     // 更新库存
                     InventoryBalance.UpdateBalance(new List<InventoryTransaction> { transaction });
-                }
+            }
 
                 // 更新收货单状态
                 this.Status = DocumentStatus.Completed;
                 this.Update();
 
                 scope.Complete();
-            }
+        }
 
             // 记录日志
             //AuditLog.Log($"收货单 {this.Code} 已完成入库，生成 {inventoryTransactions.Count} 个入库单");
         }
 
-    }
+        public void UpdateAmount()
+        {
+            this.Amount = this.Quantity * this.Price;
+            if (this.TaxRate == null) this.TaxRate = 0;
+            this.PriceIncTax = this.Price * (1 + this.TaxRate);
+            this.AmountIncTax = this.Quantity * this.PriceIncTax;
+        }
+    }    */
 }

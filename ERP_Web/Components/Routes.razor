@@ -1,7 +1,7 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
 <CascadingAuthenticationState>
     <Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="new[] { typeof(_Imports).Assembly, typeof(ERP_Web.Client._Imports).Assembly }">
-        <Found Context="routeData">
+    <Found Context="routeData">
             @*<RouteView RouteData="routeData" DefaultLayout="typeof(Layout.BasicLayout)" /> 
             <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />      *@      
             <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.BasicLayout)" >
@@ -9,13 +9,13 @@
                     <ERP_Web.Components.Layout.REdirectToLogin></ERP_Web.Components.Layout.REdirectToLogin>
                 </NotAuthorized>
             </AuthorizeRouteView>
-            <FocusOnNavigate RouteData="routeData" Selector="h1" />
-        </Found>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
         <NotFound>
             <LayoutView Layout="@typeof(Layout.BasicLayout)">
                 <p>页面未找到</p>
             </LayoutView>
         </NotFound>
-    </Router>
+</Router>
     </CascadingAuthenticationState>
- <AntContainer/>
+<AntContainer/>

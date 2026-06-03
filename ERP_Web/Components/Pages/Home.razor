@@ -6,6 +6,8 @@
 @using SqlSugar
 @inject AuthenticationStateProvider AuthStateProvider
 <!-- 页面具体内容 -->
+<h1>Welcome to our app!</h1>
+
 <PageTitle>Home</PageTitle>
 
 <h1>Hello, world!</h1>
@@ -196,14 +198,14 @@
         {
             type = "家庭清洁",
             sales = 38
-        }
+    }
     };
 
     public class icinvstatistics
     {
         public string name { get; set; }
         public int count { get; set; }
-    }
+}
 
     protected override async Task OnInitializedAsync()
     {

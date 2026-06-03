@@ -155,7 +155,7 @@ namespace ERP_Web.Models
             SSC.Db.UpdateNav(this)
                 .Include(z => z.StocktakeDetails)
                 .ExecuteCommand();
-        }
+    }
 
         /// <summary>
         /// 软删除盘点单（同时删除关联明细）

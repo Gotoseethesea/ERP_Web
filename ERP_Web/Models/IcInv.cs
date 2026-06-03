@@ -83,7 +83,7 @@ namespace ERP_Web.Models
         public int Id { set; get; }
         [SugarColumn(IsPrimaryKey = true)]
         [Display(Name = "编码")]
-        public string Code { set; get; }
+        public string Code { set; get; } 
         [Display(Name = "名称")]
         public string Name { set; get; }
         public string? Note { set; get; }
@@ -98,4 +98,5 @@ namespace ERP_Web.Models
             return result;
         }
     }
+  
 }

@@ -1,0 +1,303 @@
+﻿<h3>StocktakeView</h3>
+
+@page "/StocktakeView/{Text?}"
+
+@rendermode InteractiveServer
+@inject ModalService ModalService;
+@inject ConfirmService ComfirmService;
+@using AntDesign
+@using AntDesign.TableModels
+@using System.ComponentModel.DataAnnotations
+@using M = ERP_Web.Models
+@using ERP_Web.Repository
+@using ERP_Web.Repository.Implement
+@using SqlSugar
+@using System.Text.Json;
+
+<PageTitle>盘点表查看</PageTitle>
+<h3>盘点表查看</h3>
+<Button Type="ButtonType.Primary" OnClick="IcEdit">编辑</Button>
+
+<Form Model="@stocktake"
+      OnFinish="OnFinish"
+      OnFinishFailed="OnFinishFailed"
+      LabelColSpan="0"
+      WrapperColSpan="0">
+
+    <GridRow>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="代码">
+                <Input @bind-Value="@context.Code" style="width: 180px" />
+            </FormItem>
+        </GridCol>
+
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="日期">
+                <DatePicker @bind-Value="@context.Date" Picker="@DatePickerType.Date" style="width: 180px" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="仓库">
+                <Select TItem="M.Warehouse"
+                        TItemValue="string"
+                        DataSource="@Warehouselist"
+                        @bind-Value="@context.WarehouseCode"
+                        ValueName="@nameof(M.Warehouse.Code)"
+                        LabelName="@nameof(M.Warehouse.Name)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        OnSelectedItemChanged="WarehouseChange"
+                        DefaultActiveFirstOption="true"
+                        style="width: 180px">
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4" style="width: 180px">
+            <FormItem Label="部门">
+                <Select TItem="M.Department"
+                        TItemValue="string"
+                        DataSource="@Departmentlist"
+                        @bind-Value="@context.DepartmentCode"
+                        ValueName="@nameof(M.Department.Code)"
+                        LabelName="@nameof(M.Department.Name)"
+                        SortByLabel="@SortDirection.Ascending"
+                        SortByGroup="@SortDirection.Ascending"
+                        OnSelectedItemChanged="DeptChange"
+                        DefaultActiveFirstOption="true"
+                        style="width: 180px">
+                </Select>
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="8">
+            <FormItem Label="  摘要  ">
+                <Input @bind-Value="@context.Explanation" style="width: 440px" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label=" 数量  ">
+                <a Value="@context.Quantity" style="width: 180px" />
+            </FormItem>
+        </GridCol>
+        <GridCol Class="gutter-row" Span="4">
+            <FormItem Label="  金额  ">
+                <a Value="@context.Amount" style="width: 180px" />
+            </FormItem>
+        </GridCol>
+    </GridRow>
+
+    <Table DataSource="@stocktake.StocktakeDetails" TItem="M.StocktakeDetail" Context="row" 
+        Size="TableSize.Small"
+        PageSize="100"
+        HidePagination Bordered>
+        <PropertyColumn Property="c => c.InvCode" Title="存货" ColSpan="1" Width="100px">
+            <a>@row.InvCode</a>
+        </PropertyColumn>
+            <PropertyColumn Property="c => c.Inv.Name" >
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Quantity" Title="数量">
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.StockCount" Title="盘点数量">
+            <AntDesign.InputNumber @bind-Value="@row.StockCount" Precision="4" Bordered="false" @bind-Value:after="() => StockCountChange(row)" Width="140px" />
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Price" Title="单价">
+        </PropertyColumn>
+        <PropertyColumn Property="c => c.Amount" Title="金额">
+        </PropertyColumn>
+    </Table>
+</Form>
+
+@code
+{
+    [Parameter]
+    public string? Text { get; set; }
+
+    public int? Code;
+    Task<string> _oldTask;
+    string _selectedValue2;
+    bool _loading;
+
+    public M.Ic Ic = new();
+
+    public M.Stocktake stocktake = new();
+    public List<M.StocktakeDetail> stocktakeDetails;
+
+    public List<M.InvTrx> IcInvTrxs;
+    string _selectedValue;
+    string selectedIcinvName;
+    string selectedIcCode;
+    string Dept;
+    string WareH;
+    string invName;
+    string CodeEdit;
+    int count;
+    public bool Enable = true;
+    public bool IsVisible = false;
+
+    List<M.TrxGroup> TrxGrouplist = SqlSugarHelper.Db.Queryable<Models.TrxGroup>().ToList();
+    List<M.Department> Departmentlist = SqlSugarHelper.Db.Queryable<Models.Department>().ToList();
+    List<M.Warehouse> Warehouselist = SqlSugarHelper.Db.Queryable<Models.Warehouse>().ToList();
+    List<M.IcInv> IcInvlist = SqlSugarHelper.Db.Queryable<Models.IcInv>().ToList();
+    List<M.IcInv> IcInvlist2 = SqlSugarHelper.Db.Queryable<Models.IcInv>().ToList();
+    List<M.IcPrice> IcPricelist = SqlSugarHelper.Db.Queryable<Models.IcPrice>().ToList();
+    List<M.IcPrice> IcPriceInsertlist = [];
+
+    protected override void OnInitialized()
+    {
+        string? Code;
+        Code = Text;
+        stocktake = SqlSugarHelper.Db.Queryable<M.Stocktake>()
+        .Includes(x => x.StocktakeDetails, z => z.Inv)
+        .Includes(y => y.Department)
+        .Includes(y => y.Warehouse)
+        .Where(it => it.Code == Code).First();
+    }
+    void IcEdit()
+    {
+        Enable = false;
+        IsVisible = true;
+    }
+
+    void IcTrxGroupChange(M.TrxGroup value)
+    {
+        Ic.TrxGroupCode = value?.Code;
+        Ic.TrxType = 1;
+        Ic.InsertTime = DateTime.Now;
+        Ic.LastUpdateTime = DateTime.Now;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void WarehouseChange(M.Warehouse value)
+    {
+        Ic.WarehouseCode = value?.Code;
+
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void DeptChange(M.Department value)
+    {
+        Ic.DepartmentCode = value?.Code;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void InvChange(M.IcInv value)
+    {
+        //Ic.Department = value?.DepartmentDec;
+        Console.WriteLine($"selected: ${value?.Name}");
+    }
+    void StockCountChange(M.StocktakeDetail stocktakeDetails)
+    {
+        if (stocktakeDetails.StockCount == null) stocktakeDetails.StockCount = stocktakeDetails.Quantity;
+        stocktakeDetails.Amount = stocktakeDetails.StockCount * stocktakeDetails.Price;
+        // stocktakeDetails.UpdateAmount();
+    }
+    private M.InvTrx InvTrx = new M.InvTrx();
+    private decimal IcPriceByID(string Code)
+    {
+        decimal Price = 0M;
+        foreach (M.IcPrice IcPrice in IcPricelist.Where(x => x.InvCode == Code))
+        {
+            Price = IcPrice.Price;
+        }
+        return Price;
+    }
+
+    void addRow()
+    {
+        // M.InvTrx icinvadd = new M.InvTrx(Ic.CODE) { Code = 0, Quantity = 0, Price = 0, Amount = 0 };
+        // Ic.InvTrxs.Add(icinvadd);
+
+        count = Ic.InvTrxs.Count;
+        // invName = Ic.InvTrxs[0].Inv.InvName;
+        Console.WriteLine($"Success:{JsonSerializer.Serialize("char")}");
+        Console.WriteLine(Ic.InvTrxs.Count().ToString());
+        Console.WriteLine(Ic.InvTrxs[0]);
+        Console.WriteLine(Ic.InvTrxs[0].Inv.Name.ToString());
+        // model.Students.Add(new());
+    }
+
+    private List<M.IcInv> GetIcInvListByInvTrx(List<M.InvTrx> InvTrxs)
+    {
+        List<M.IcInv> icInvs = new List<M.IcInv>();
+        foreach (M.InvTrx invTrx in InvTrxs)
+        {
+            icInvs.Add(invTrx.Inv);
+        }
+        return icInvs;
+    }
+    private void OnFinish(EditContext editContext)
+    {
+
+        Ic.TrxType = 1;
+        Ic.Amount = 0;
+
+        foreach (M.InvTrx invTrx in Ic.InvTrxs)
+        {
+            // InvTrx.Amount = InvTrx.Quantity * InvTrx.Price;
+            // InvTrx.AmountIncTax = InvTrx.Quantity * InvTrx.PriceIncTax;
+            Ic.Amount += invTrx.Amount;
+            Ic.AmountIncTax += invTrx.AmountIncTax;
+            Ic.Quantity += invTrx.Quantity;
+            Ic.AmountIncTax = invTrx.AmountIncTax;
+
+            M.IcPrice icPrice = new M.IcPrice { InvCode = invTrx.InvCode, Quantity = invTrx.Quantity, Price = invTrx.Price, Amount = invTrx.Amount };
+
+            IcPriceInsertlist.Add(icPrice);
+        }
+
+        SqlSugarHelper.Db.UpdateNav(Ic)
+            .Include(z1 => z1.InvTrxs)
+            .ExecuteCommand();
+        int res;
+        res = SqlSugarHelper.Db.Updateable(IcPriceInsertlist).ExecuteCommand();
+
+        IsVisible = false ;
+
+
+        Console.WriteLine($"Update Success:{JsonSerializer.Serialize(Ic)}");
+        Console.WriteLine($"Success:{JsonSerializer.Serialize(IcPriceInsertlist)}");
+
+    }
+
+    private void OnFinishFailed(EditContext editContext)
+    {
+        Console.WriteLine($"Failed:{JsonSerializer.Serialize(Ic.Code)}");
+    }
+
+    private async Task InvOnSearch(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (_oldTask == null || _oldTask.IsCompleted)
+            {   
+                _loading = true;
+                StateHasChanged();
+
+            }
+        }
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void OnSelectedItemChangedHandler(M.IcInv value)
+    {
+        string id = value.Code;
+        CodeEdit = value.Code;
+
+        foreach (M.InvTrx invTrx in Ic.InvTrxs/* .Where(M => M.Code == 0) */)
+        {
+            invTrx.InvTrxUpdateCode(Ic.Code);
+
+        }
+
+        foreach (M.InvTrx invTrx in Ic.InvTrxs.Where(M => M.InvCode == value.Code))
+        {
+            invTrx.UpdatePrice(IcPriceByID(invTrx.InvCode));
+        }
+
+
+
+        Console.WriteLine($"selected: ${value?.Code}");
+        Console.WriteLine($"selected: ${value?.Name}");
+
+    }
+
+}
